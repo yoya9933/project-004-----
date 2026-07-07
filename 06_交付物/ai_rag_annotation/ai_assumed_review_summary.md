@@ -15,8 +15,9 @@
 
 ## 輸出
 
-- 更新後標註表：`annotation_workbook_ai_assumed_review.csv`
-- 原始備份：`未覆寫原檔，未建立備份`
+- 更新後標註表：`annotation_workbook.csv`
+- 同內容副本：`annotation_workbook_ai_assumed_review.csv`
+- 原始備份：`annotation_workbook.before_ai_assumed_review_20260707_233448.csv`
 - 選值品質表：`ai_assumed_review_quality.csv`
 
 ## 重要限制

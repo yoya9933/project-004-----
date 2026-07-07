@@ -1,14 +1,19 @@
 ﻿{
-    "status":  "skipped",
-    "reason":  "not_enough_official_is_reduced_labels",
+    "status":  "ok",
     "input_csv":  "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\ai_rag_annotation\\annotation_workbook.csv",
     "total_rows":  120,
-    "labeled_rows":  0,
-    "min_labeled_rows":  30,
+    "labeled_rows":  120,
+    "training_split":  "2021-2024",
+    "validation_split":  "2025",
+    "test_split":  "2026",
     "class_counts":  {
-                         "0":  0,
-                         "1":  0
+                         "0":  46,
+                         "1":  74
                      },
+    "train_class_counts":  {
+                               "0":  34,
+                               "1":  54
+                           },
     "model_features":  [
                            "x_log_contract_price",
                            "x_log_claimed_penalty",
@@ -41,7 +46,10 @@
                                 ],
     "outputs":  {
                     "feature_matrix":  "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\is_reduced_classification\\feature_matrix.csv",
-                    "labeled_feature_matrix":  "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\is_reduced_classification\\labeled_feature_matrix.csv"
+                    "labeled_feature_matrix":  "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\is_reduced_classification\\labeled_feature_matrix.csv",
+                    "metrics":  "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\is_reduced_classification\\metrics.csv",
+                    "predictions":  "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\is_reduced_classification\\predictions.csv",
+                    "model_coefficients":  "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\is_reduced_classification\\model_coefficients.csv"
                 },
-    "note":  "Only official/manual is_reduced labels are used by default. AI suggestions are features, not labels."
+    "note":  "The default logistic model excludes direct reduction keyword features; keyword terms are evaluated separately as a rule baseline."
 }
