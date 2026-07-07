@@ -1,0 +1,47 @@
+﻿{
+    "status":  "skipped",
+    "reason":  "not_enough_verified_penalty_ratio_targets",
+    "input_csv":  "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\ai_rag_annotation\\annotation_workbook.csv",
+    "total_rows":  120,
+    "usable_target_rows":  0,
+    "min_target_rows":  30,
+    "target_quality_counts":  {
+                                  "missing_claimed_or_allowed_penalty":  120
+                              },
+    "model_features":  [
+                           "x_log_contract_price",
+                           "x_log_claimed_penalty",
+                           "x_claim_to_contract_ratio",
+                           "x_delay_days",
+                           "x_penalty_per_delay_day",
+                           "x_issue_owner_fault",
+                           "x_issue_contractor_fault",
+                           "x_issue_extension_request",
+                           "x_issue_actual_damage_unclear",
+                           "x_issue_partial_completion",
+                           "x_issue_used_by_owner",
+                           "x_ai_issue_owner_fault",
+                           "x_ai_issue_contractor_fault",
+                           "x_ai_issue_extension_request",
+                           "x_ai_issue_actual_damage_unclear",
+                           "x_ai_issue_partial_completion",
+                           "x_ai_issue_used_by_owner",
+                           "x_money_candidate_count",
+                           "x_delay_candidate_count"
+                       ],
+    "screening_only_features":  [
+                                    "x_relevance_score",
+                                    "x_penalty_term_count",
+                                    "x_delay_term_count",
+                                    "x_strong_reduction_term_count",
+                                    "x_has_mfa_252",
+                                    "x_has_discretion",
+                                    "x_has_over_high"
+                                ],
+    "outputs":  {
+                    "ratio_model_frame":  "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\reduction_ratio_model\\ratio_model_frame.csv",
+                    "usable_ratio_model_frame":  "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\reduction_ratio_model\\usable_ratio_model_frame.csv",
+                    "target_quality_summary":  "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\reduction_ratio_model\\target_quality_summary.csv"
+                },
+    "note":  "Targets are derived only from manually verified claimed_penalty and allowed_penalty. Raw penalty amount is not used as the target."
+}

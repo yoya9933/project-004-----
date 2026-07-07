@@ -1,0 +1,13 @@
+﻿issue,present_cases,present_reduction_case_rate,present_avg_remaining_ratio,absent_cases,absent_reduction_case_rate,absent_avg_remaining_ratio
+issue_payment,0,,,0,,
+issue_additional_or_change_work,0,,,0,,
+issue_acceptance_or_settlement,0,,,0,,
+issue_delay_or_penalty,0,,,0,,
+issue_defect_or_repair,0,,,0,,
+issue_retention_or_warranty,0,,,0,,
+issue_setoff_or_deduction,0,,,0,,
+issue_termination,0,,,0,,
+issue_unjust_enrichment,0,,,0,,
+issue_public_procurement,0,,,0,,
+issue_promissory_note,0,,,0,,
+issue_appraisal,0,,,0,,

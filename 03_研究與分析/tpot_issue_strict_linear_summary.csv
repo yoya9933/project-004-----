@@ -1,0 +1,25 @@
+﻿target,n_rows,positive,negative,cv,tpot_best_balanced_accuracy,cv_balanced_accuracy_mean,cv_balanced_accuracy_std,linear_model_type,model,status
+issue_payment,26,26,0,,,,,,,skipped_single_class
+issue_additional_or_change_work,26,21,5,3.0,0.8452380952380952,0.7619047619047619,0.016835875742536838,LinearDiscriminantAnalysis,"LinearDiscriminantAnalysis(shrinkage=0.8852228635309, solver=np.str_('lsqr'))",ok
+issue_acceptance_or_settlement,26,22,4,3.0,0.7619047619047619,0.8273809523809524,0.05520011009223634,LogisticRegression,"LogisticRegression(C=0.0783070297354, class_weight='balanced', max_iter=1000,
+                   n_jobs=1, penalty=np.str_('l2'), random_state=42,
+                   solver='saga')",ok
+issue_delay_or_penalty,26,21,5,3.0,0.7023809523809524,0.6547619047619048,0.11040022018447265,LinearDiscriminantAnalysis,"LinearDiscriminantAnalysis(shrinkage=0.9932222132654, solver=np.str_('lsqr'))",ok
+issue_defect_or_repair,26,14,12,3.0,0.85,0.6,0.07359800721939874,SGDClassifier,"SGDClassifier(alpha=2.2412215e-05, class_weight='balanced',
+              eta0=0.7067479349502, fit_intercept=np.True_,
+              l1_ratio=0.3007762338176, learning_rate=np.str_('invscaling'),
+              loss=np.str_('modified_huber'), n_jobs=1, penalty='elasticnet',
+              power_t=0.0009426865215, random_state=42)",ok
+issue_retention_or_warranty,26,10,16,3.0,0.6638888888888889,0.6499999999999999,0.04906533814626583,LogisticRegression,"LogisticRegression(C=0.0783070297354, class_weight='balanced', max_iter=1000,
+                   n_jobs=1, penalty=np.str_('l2'), random_state=42,
+                   solver='saga')",ok
+issue_setoff_or_deduction,26,10,16,3.0,0.7527777777777778,0.5861111111111111,0.14693367950486885,LinearSVC,"LinearSVC(C=1752.517947482993, loss=np.str_('squared_hinge'),
+          penalty=np.str_('l2'), random_state=42)",ok
+issue_termination,26,13,13,3.0,0.6583333333333333,0.6833333333333332,0.05137011669140813,LogisticRegression,"LogisticRegression(C=0.2059536147852, max_iter=1000, n_jobs=1,
+                   penalty=np.str_('l2'), random_state=42, solver='saga')",ok
+issue_unjust_enrichment,26,7,19,3.0,0.7063492063492064,0.6428571428571428,0.16609880584489164,LogisticRegression,"LogisticRegression(C=4.5448715292717, class_weight='balanced', max_iter=1000,
+                   n_jobs=1, penalty=np.str_('l1'), random_state=42,
+                   solver='saga')",ok
+issue_public_procurement,26,10,16,3.0,0.6333333333333333,0.375,0.037883838047182934,LinearDiscriminantAnalysis,LinearDiscriminantAnalysis(solver=np.str_('svd')),ok
+issue_promissory_note,26,2,24,2.0,0.6666666666666666,0.41666666666666663,0.04166666666666666,LinearDiscriminantAnalysis,"LinearDiscriminantAnalysis(shrinkage=0.0381115289222, solver=np.str_('eigen'))",ok
+issue_appraisal,26,9,17,3.0,0.6666666666666666,0.5499999999999999,0.10274023338281628,LinearDiscriminantAnalysis,"LinearDiscriminantAnalysis(shrinkage=0.4825790271133, solver=np.str_('eigen'))",ok

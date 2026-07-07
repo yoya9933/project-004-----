@@ -1,0 +1,36 @@
+﻿field,type,description
+case_id,文字,自訂案件代號，由 jid 轉換而來
+court,文字,法院名稱，優先由 JSON 判決全文第一行推定
+case_year_roc,文字,案號年度，民國年
+decision_year,文字,裁判西元年
+case_no,文字,案號文字
+project_type,類別,人工標註：建築、道路、橋梁、機電、水利等
+contract_price,數字,人工標註：契約總價
+delay_days,數字,人工標註：法院認定逾期天數
+penalty_rate_per_day,數字,人工標註：每日違約金比例，例如 0.001
+claimed_penalty,數字,人工標註：業主主張或扣罰違約金
+allowed_penalty,數字,人工標註：法院最後准許違約金
+penalty_to_contract,數字,衍生欄位：claimed_penalty / contract_price
+remaining_ratio,數字,衍生欄位：allowed_penalty / claimed_penalty
+reduction_rate,數字,衍生欄位：1 - remaining_ratio
+is_reduced,0/1,衍生欄位：allowed_penalty < claimed_penalty
+key_reason,文字,人工標註：法院核心理由摘要
+amount_candidates_delay_or_penalty,文字,既有金額候選，僅供人工標註參考
+issue_actual_damage_unclear,0/1,建議新增人工爭點標註欄位
+issue_partial_completion,0/1,建議新增人工爭點標註欄位
+issue_owner_fault,0/1,建議新增人工爭點標註欄位
+issue_contractor_fault,0/1,建議新增人工爭點標註欄位
+issue_extension_request,0/1,建議新增人工爭點標註欄位
+issue_used_by_owner,0/1,建議新增人工爭點標註欄位
+issue_payment,0/1,既有 TPOT 爭點標註欄位
+issue_additional_or_change_work,0/1,既有 TPOT 爭點標註欄位
+issue_acceptance_or_settlement,0/1,既有 TPOT 爭點標註欄位
+issue_delay_or_penalty,0/1,既有 TPOT 爭點標註欄位
+issue_defect_or_repair,0/1,既有 TPOT 爭點標註欄位
+issue_retention_or_warranty,0/1,既有 TPOT 爭點標註欄位
+issue_setoff_or_deduction,0/1,既有 TPOT 爭點標註欄位
+issue_termination,0/1,既有 TPOT 爭點標註欄位
+issue_unjust_enrichment,0/1,既有 TPOT 爭點標註欄位
+issue_public_procurement,0/1,既有 TPOT 爭點標註欄位
+issue_promissory_note,0/1,既有 TPOT 爭點標註欄位
+issue_appraisal,0/1,既有 TPOT 爭點標註欄位

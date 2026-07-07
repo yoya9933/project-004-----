@@ -1,0 +1,510 @@
+可以把實作分成 **「可交報告版」** 和 **「進階模型版」**。你目前已經有用 TPOT 針對 26 筆、11 個 0/1 爭點欄位做線性模型搜尋的方向；但這種樣本數很小，建議不要把它包裝成「預測法院」，而是包裝成 **判決資料標註＋探索性分析＋線性模型輔助解釋**。你貼的紀錄裡也有提到資料量是 26 筆、11 個爭點標籤，且 TPOT 嚴格線性版主要落在 LogisticRegression 與 LinearDiscriminantAnalysis 這類可解釋模型，這個方向適合作為輔助分析。
+
+---
+
+## 一、建議主軸
+
+題目可以改得更工程資料分析一點：
+
+> **工程逾期違約金酌減因素之判決資料分析：以逾期天數、違約金比例與法院酌減結果為中心**
+
+不要主打「AI 預測判決」。
+建議主打：
+
+> **法院酌減與否，可能受到哪些可標註因素影響？**
+
+因為法律上法院可依民法第252條酌減過高違約金；若有一部履行，也可能牽涉民法第251條的利益衡量。這些條文可以作為你們資料欄位設計的法律基礎。([法規資料庫][1])
+
+---
+
+## 二、資料表不要只放 issue_*，要補「數值欄位」
+
+你們現在的 `test_issue_features.csv` 如果主要是 `issue_*` 這種 0/1 欄位，還不夠做「逾期天數 × 酌減比例」這張圖。
+
+建議新增一份主資料表：
+
+```text
+penalty_cases.csv
+```
+
+欄位建議如下：
+
+| 欄位名稱                        |  型態 | 說明               |
+| --------------------------- | --: | ---------------- |
+| case_id                     |  文字 | 自訂案件代號           |
+| court                       |  文字 | 法院               |
+| year                        |  數字 | 年度               |
+| case_no                     |  文字 | 案號               |
+| project_type                |  類別 | 建築、道路、橋梁、機電、水利等  |
+| contract_price              |  數字 | 契約總價             |
+| delay_days                  |  數字 | 法院認定逾期天數         |
+| penalty_rate_per_day        |  數字 | 每日違約金比例，例如 0.001 |
+| claimed_penalty             |  數字 | 業主主張或扣罰違約金       |
+| allowed_penalty             |  數字 | 法院最後准許違約金        |
+| penalty_to_contract         |  數字 | 原違約金／契約總價        |
+| remaining_ratio             |  數字 | 酌減後比例            |
+| reduction_rate              |  數字 | 酌減幅度             |
+| is_reduced                  | 0/1 | 是否酌減             |
+| issue_actual_damage_unclear | 0/1 | 業主實際損害不明         |
+| issue_partial_completion    | 0/1 | 工程已部分完成          |
+| issue_owner_fault           | 0/1 | 業主亦有責任           |
+| issue_contractor_fault      | 0/1 | 承包商可歸責           |
+| issue_extension_request     | 0/1 | 是否有展延申請          |
+| issue_used_by_owner         | 0/1 | 業主已使用工程成果        |
+| key_reason                  |  文字 | 法院核心理由摘要         |
+
+---
+
+## 三、幾個必要公式
+
+假設：
+
+* `contract_price` = 契約總價
+* `claimed_penalty` = 原違約金
+* `allowed_penalty` = 法院准許金額
+
+公式如下：
+
+```python
+penalty_to_contract = claimed_penalty / contract_price
+remaining_ratio = allowed_penalty / claimed_penalty
+reduction_rate = 1 - remaining_ratio
+is_reduced = 1 if allowed_penalty < claimed_penalty else 0
+```
+
+意義：
+
+| 指標                    | 解釋         |
+| --------------------- | ---------- |
+| `penalty_to_contract` | 違約金占契約總價比例 |
+| `remaining_ratio`     | 法院保留多少違約金  |
+| `reduction_rate`      | 法院砍掉多少比例   |
+| `is_reduced`          | 有沒有酌減      |
+
+例如：
+
+| 案件 | 原違約金 | 法院准許 | remaining_ratio | reduction_rate |
+| -- | ---: | ---: | --------------: | -------------: |
+| A案 | 100萬 | 100萬 |            100% |             0% |
+| B案 | 100萬 |  70萬 |             70% |            30% |
+| C案 | 100萬 |  40萬 |             40% |            60% |
+| D案 | 100萬 |  25萬 |             25% |            75% |
+
+---
+
+## 四、最小可行實作流程
+
+### Step 1：先人工標註 15～30 件
+
+每件判決先只抓這些欄位：
+
+```text
+case_id
+contract_price
+delay_days
+claimed_penalty
+allowed_penalty
+is_reduced
+key_reason
+```
+
+這樣就能先畫出核心圖。
+
+### Step 2：補上爭點欄位
+
+再人工或用 AI 輔助標註：
+
+```text
+issue_actual_damage_unclear
+issue_partial_completion
+issue_owner_fault
+issue_contractor_fault
+issue_extension_request
+issue_used_by_owner
+```
+
+這些欄位才是後面做模型或交叉分析的重點。
+
+### Step 3：做三種分析
+
+建議做這三個就夠：
+
+1. **散佈圖**：逾期天數 × 酌減後比例
+2. **分組表**：違約金占契約總價比例 × 酌減率
+3. **爭點比較表**：各爭點出現時，法院酌減比例是否較高
+
+---
+
+## 五、Python 實作範例
+
+### 1. 讀取資料與計算欄位
+
+```python
+import pandas as pd
+
+df = pd.read_csv("penalty_cases.csv")
+
+df["penalty_to_contract"] = df["claimed_penalty"] / df["contract_price"]
+df["remaining_ratio"] = df["allowed_penalty"] / df["claimed_penalty"]
+df["reduction_rate"] = 1 - df["remaining_ratio"]
+df["is_reduced"] = (df["allowed_penalty"] < df["claimed_penalty"]).astype(int)
+
+df.to_csv("penalty_cases_cleaned.csv", index=False)
+```
+
+---
+
+### 2. 畫「逾期天數 × 酌減後比例」散佈圖
+
+```python
+import pandas as pd
+import matplotlib.pyplot as plt
+
+df = pd.read_csv("penalty_cases_cleaned.csv")
+
+plt.figure(figsize=(8, 5))
+plt.scatter(
+    df["delay_days"],
+    df["remaining_ratio"] * 100,
+    s=(df["penalty_to_contract"] * 1000).clip(lower=30, upper=400),
+    alpha=0.7
+)
+
+for _, row in df.iterrows():
+    plt.text(
+        row["delay_days"],
+        row["remaining_ratio"] * 100,
+        row["case_id"],
+        fontsize=8
+    )
+
+plt.xlabel("逾期天數")
+plt.ylabel("酌減後比例（%）")
+plt.title("逾期天數與違約金酌減後比例")
+plt.grid(True, alpha=0.3)
+plt.tight_layout()
+plt.savefig("delay_days_vs_remaining_ratio.png", dpi=300)
+plt.show()
+```
+
+這張圖的設定：
+
+| 圖形元素 | 代表意義      |
+| ---- | --------- |
+| X 軸  | 逾期天數      |
+| Y 軸  | 酌減後比例     |
+| 點的大小 | 原違約金／契約總價 |
+| 案件標籤 | case_id   |
+
+點越低，代表法院酌減越多。
+點越大，代表原違約金占契約總價越高。
+
+---
+
+## 六、建議加一張「分組統計表」
+
+比散佈圖更容易寫結論。
+
+```python
+bins = [0, 0.05, 0.10, 0.20, 1.00]
+labels = ["0-5%", "5-10%", "10-20%", "20%以上"]
+
+df["penalty_ratio_group"] = pd.cut(
+    df["penalty_to_contract"],
+    bins=bins,
+    labels=labels,
+    include_lowest=True
+)
+
+summary = df.groupby("penalty_ratio_group").agg(
+    cases=("case_id", "count"),
+    reduced_cases=("is_reduced", "sum"),
+    reduction_rate=("is_reduced", "mean"),
+    avg_remaining_ratio=("remaining_ratio", "mean")
+).reset_index()
+
+summary["reduction_rate"] = summary["reduction_rate"] * 100
+summary["avg_remaining_ratio"] = summary["avg_remaining_ratio"] * 100
+
+print(summary)
+summary.to_csv("penalty_ratio_group_summary.csv", index=False)
+```
+
+輸出會長這樣：
+
+| 違約金占契約總價 | 案件數 | 酌減件數 |  酌減率 | 平均酌減後比例 |
+| -------- | --: | ---: | ---: | ------: |
+| 0-5%     |   5 |    1 |  20% |     90% |
+| 5-10%    |   6 |    3 |  50% |     75% |
+| 10-20%   |   5 |    4 |  80% |     55% |
+| 20%以上    |   4 |    4 | 100% |     35% |
+
+報告可以寫：
+
+> 樣本中，原違約金占契約總價比例越高，法院酌減比例似有上升趨勢。但因樣本數有限，且法院仍會綜合考量實際損害、部分履行、業主是否有責、遲延原因等因素，因此本研究僅能作為探索性觀察，不能推論為固定規則。
+
+---
+
+## 七、如果要接你現在的 TPOT／線性模型
+
+你們可以設計兩個模型任務。
+
+### 任務 A：預測「是否酌減」
+
+目標欄位：
+
+```text
+is_reduced
+```
+
+特徵欄位：
+
+```text
+delay_days
+penalty_to_contract
+issue_actual_damage_unclear
+issue_partial_completion
+issue_owner_fault
+issue_extension_request
+issue_used_by_owner
+```
+
+適合模型：
+
+```text
+LogisticRegression
+LinearDiscriminantAnalysis
+LinearSVC
+```
+
+報告說法：
+
+> 本研究以線性分類模型作為輔助分析工具，觀察哪些因素與法院是否酌減較有關聯。由於樣本數有限，模型結果不作為預測法院判決之依據，而作為判決因素排序與資料探索使用。
+
+---
+
+### 任務 B：分析「酌減幅度」
+
+目標欄位：
+
+```text
+reduction_rate
+```
+
+特徵欄位同上。
+
+適合模型：
+
+```text
+LinearRegression
+Ridge
+Lasso
+ElasticNet
+```
+
+這個任務比較像：
+
+> 哪些因素與法院酌減幅度較高有關？
+
+不過樣本數很小時，我會優先做任務 A，因為分類「有酌減／沒酌減」比預測酌減百分比穩定一點。
+
+---
+
+## 八、建議模型實作：不要只靠 TPOT
+
+TPOT 可以用來說明「自動搜尋模型」，但正式報告最好另外保留一個人工指定的 Logistic Regression，因為它比較好解釋。
+
+```python
+import pandas as pd
+from sklearn.linear_model import LogisticRegression
+from sklearn.preprocessing import StandardScaler
+from sklearn.pipeline import Pipeline
+from sklearn.model_selection import LeaveOneOut, cross_val_score
+from sklearn.metrics import balanced_accuracy_score, make_scorer
+
+df = pd.read_csv("penalty_cases_cleaned.csv")
+
+features = [
+    "delay_days",
+    "penalty_to_contract",
+    "issue_actual_damage_unclear",
+    "issue_partial_completion",
+    "issue_owner_fault",
+    "issue_extension_request",
+    "issue_used_by_owner",
+]
+
+X = df[features]
+y = df["is_reduced"]
+
+model = Pipeline([
+    ("scaler", StandardScaler()),
+    ("clf", LogisticRegression(max_iter=1000, class_weight="balanced"))
+])
+
+cv = LeaveOneOut()
+scores = cross_val_score(
+    model,
+    X,
+    y,
+    cv=cv,
+    scoring=make_scorer(balanced_accuracy_score)
+)
+
+print("平均 balanced accuracy:", scores.mean())
+
+model.fit(X, y)
+
+coef = pd.DataFrame({
+    "feature": features,
+    "coefficient": model.named_steps["clf"].coef_[0]
+}).sort_values("coefficient", ascending=False)
+
+print(coef)
+coef.to_csv("logistic_regression_coefficients.csv", index=False)
+```
+
+係數解讀方式：
+
+| 係數方向 | 意義                   |
+| ---- | -------------------- |
+| 正係數  | 該因素出現時，較傾向與「法院酌減」同向  |
+| 負係數  | 該因素出現時，較傾向與「法院不酌減」同向 |
+| 接近 0 | 關聯不明顯                |
+
+但報告一定要加限制：
+
+> 係數僅代表本樣本中的統計關聯，不代表法院實際法律判斷的因果關係。
+
+---
+
+## 九、最適合放在成果報告的四個輸出
+
+你們最後可以交這四個東西：
+
+### 1. 判決標註表
+
+檔名：
+
+```text
+penalty_cases_cleaned.csv
+```
+
+內容：
+
+* 案號
+* 逾期天數
+* 違約金金額
+* 酌減後金額
+* 酌減理由
+* 爭點欄位
+
+---
+
+### 2. 散佈圖
+
+檔名：
+
+```text
+delay_days_vs_remaining_ratio.png
+```
+
+圖名：
+
+> 逾期天數與法院酌減後比例之關係
+
+---
+
+### 3. 分組統計表
+
+檔名：
+
+```text
+penalty_ratio_group_summary.csv
+```
+
+分析：
+
+> 違約金占契約總價越高的組別，是否更常被法院酌減？
+
+---
+
+### 4. 線性模型係數表
+
+檔名：
+
+```text
+logistic_regression_coefficients.csv
+```
+
+分析：
+
+> 哪些因素與法院酌減結果較有關聯？
+
+---
+
+## 十、報告架構可以這樣寫
+
+### 1. 研究目的
+
+分析工程逾期違約金案件中，法院酌減違約金時常見的判斷因素，並以資料標註與線性模型輔助觀察因素關聯。
+
+### 2. 資料蒐集
+
+蒐集臺灣工程契約逾期違約金判決，排除非工程契約、非逾期違約金、判決未討論違約金酌減、金額或天數不明確者。
+
+### 3. 資料標註
+
+將判決轉換為結構化欄位，包括逾期天數、契約總價、原違約金、法院准許金額、是否酌減、酌減理由與爭點特徵。
+
+### 4. 分析方法
+
+* 描述統計
+* 散佈圖分析
+* 違約金比例分組
+* Logistic Regression 輔助分析
+* AI 標註結果人工查核
+
+### 5. 研究發現
+
+可以分成：
+
+* 違約金比例與酌減結果
+* 逾期天數與酌減幅度
+* 常見酌減理由
+* 線性模型係數觀察
+* AI 標註錯誤類型
+
+### 6. 研究限制
+
+一定要寫：
+
+* 樣本數有限。
+* 判決事實差異大。
+* 法院判斷不是單一數字決定。
+* AI 萃取可能誤判金額、逾期天數或判決結果。
+* 模型只能輔助觀察，不能預測個案結果。
+
+---
+
+## 十一、最實際的分工方式
+
+如果是 3～4 人小組，可以這樣分：
+
+| 角色 | 工作                |
+| -- | ----------------- |
+| A  | 搜尋與篩選判決           |
+| B  | 標註金額、天數、是否酌減      |
+| C  | 標註爭點欄位與法院理由       |
+| D  | Python 分析、畫圖、整理報告 |
+
+如果人少，優先順序是：
+
+1. 先完成 15 件判決標註。
+2. 先畫散佈圖。
+3. 再做分組統計。
+4. 最後才做 TPOT 或 Logistic Regression。
+
+不要一開始就卡在模型。這個題目的核心價值是 **判決資料結構化**，模型只是輔助。
+
+[1]: https://law.moj.gov.tw/LawClass/LawAll.aspx?pcode=B0000001&utm_source=chatgpt.com "民法 - 全國法規資料庫- 法務部"
