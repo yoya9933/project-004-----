@@ -1,0 +1,30 @@
+﻿{
+  "status": "ok",
+  "case_count": 120,
+  "similar_case_evidence_count": 600,
+  "feature_contribution_count": 6840,
+  "classification_model": "logistic_regression_l2",
+  "ratio_main_model": "ridge_regression_l2",
+  "ratio_secondary_model": "lasso_regression_l1",
+  "ratio_baseline_model": "mean_baseline",
+  "inputs": {
+    "annotation_csv": "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\ai_rag_annotation\\annotation_workbook.csv",
+    "rag_index_csv": "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\ai_rag_annotation\\rag_case_index.csv",
+    "similar_cases_csv": "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\ai_rag_annotation\\rag_similar_cases.csv",
+    "classification_dir": "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\is_reduced_classification",
+    "ratio_dir": "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\reduction_ratio_model"
+  },
+  "outputs": {
+    "case_explanation_summary": "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\rag_model_explanation\\case_explanation_summary.csv",
+    "similar_case_evidence": "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\rag_model_explanation\\similar_case_evidence.csv",
+    "model_feature_contributions": "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\rag_model_explanation\\model_feature_contributions.csv",
+    "case_explanation_cards": "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\rag_model_explanation\\case_explanation_cards.md",
+    "rag_model_explanation_workflow": "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\rag_model_explanation\\rag_model_explanation_workflow.md",
+    "explanation_status": "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\rag_model_explanation\\explanation_status.json"
+  },
+  "notes": [
+    "Current labels are AI-assumed and require manual verification before formal claims.",
+    "RAG similarity is lexical/evidence-oriented and should not be treated as legal identity.",
+    "Feature contributions explain model mechanics, not legal causation."
+  ]
+}

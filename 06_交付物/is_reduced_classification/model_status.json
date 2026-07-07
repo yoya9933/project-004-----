@@ -3,16 +3,17 @@
     "input_csv":  "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\ai_rag_annotation\\annotation_workbook.csv",
     "total_rows":  120,
     "labeled_rows":  120,
-    "training_split":  "2021-2024",
-    "validation_split":  "2025",
-    "test_split":  "2026",
+    "training_split":  "2021-2023",
+    "validation_split":  "2024",
+    "test_split":  "2025",
+    "latest_check_split":  "2026",
     "class_counts":  {
                          "0":  46,
                          "1":  74
                      },
     "train_class_counts":  {
-                               "0":  34,
-                               "1":  54
+                               "0":  23,
+                               "1":  43
                            },
     "model_features":  [
                            "x_log_contract_price",

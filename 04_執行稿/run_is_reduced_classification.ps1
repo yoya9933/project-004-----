@@ -5,6 +5,11 @@
     [int]$Iterations = 2500,
     [double]$LearningRate = 0.05,
     [double]$L2 = 0.01,
+    [int]$TrainStartYear = 2021,
+    [int]$TrainEndYear = 2023,
+    [int]$ValidationYear = 2024,
+    [int]$TestYear = 2025,
+    [int]$LatestCheckYear = 2026,
     [switch]$UseDerivedLabelFromAmounts
 )
 
@@ -473,6 +478,12 @@ function Write-SkippedStatus {
         class_counts = $Details.class_counts
         model_features = $FeatureNames
         screening_only_features = $ScreeningOnlyFeatures
+        split_policy = [ordered]@{
+            train = "$TrainStartYear-$TrainEndYear"
+            validation = "$ValidationYear"
+            test = "$TestYear"
+            latest_check = "$LatestCheckYear"
+        }
         outputs = $Details.outputs
         note = "Only official/manual is_reduced labels are used by default. AI suggestions are features, not labels."
     }
@@ -499,7 +510,7 @@ function Write-SkippedStatus {
         "",
         '- 先在 `annotation_workbook.csv` 補 `is_reduced`，0 表示未酌減，1 表示酌減。',
         '- 建議同步補 `contract_price`、`claimed_penalty`、`delay_days` 與 issue 欄位。',
-        "- 補標後重新執行本腳本，即可依 2021-2024 訓練、2025 驗證、2026 測試輸出回測指標。",
+        "- 補標後重新執行本腳本，即可依 $TrainStartYear-$TrainEndYear 訓練、$ValidationYear 驗證、$TestYear 測試、$LatestCheckYear 最新年度檢查輸出回測指標。",
         "",
         "## 防呆說明",
         "",
@@ -639,13 +650,14 @@ if ($classCounts["0"] -eq 0 -or $classCounts["1"] -eq 0) {
     exit 0
 }
 
-$trainRows = @($labeledRows | Where-Object { [int]$_.decision_year -ge 2021 -and [int]$_.decision_year -le 2024 })
-$validationRows = @($labeledRows | Where-Object { [int]$_.decision_year -eq 2025 })
-$testRows = @($labeledRows | Where-Object { [int]$_.decision_year -eq 2026 })
+$trainRows = @($labeledRows | Where-Object { [int]$_.decision_year -ge $TrainStartYear -and [int]$_.decision_year -le $TrainEndYear })
+$validationRows = @($labeledRows | Where-Object { [int]$_.decision_year -eq $ValidationYear })
+$testRows = @($labeledRows | Where-Object { [int]$_.decision_year -eq $TestYear })
+$latestRows = @($labeledRows | Where-Object { [int]$_.decision_year -eq $LatestCheckYear })
 $trainClassCounts = Get-ClassCounts $trainRows
 
 if ($trainRows.Count -lt 10 -or $trainClassCounts["0"] -eq 0 -or $trainClassCounts["1"] -eq 0) {
-    Write-SkippedStatus -Reason "not_enough_two_class_training_rows_in_2021_2024" -Details @{
+    Write-SkippedStatus -Reason "not_enough_two_class_training_rows_in_train_split" -Details @{
         total_rows = $featureArray.Count
         labeled_rows = $labeledRows.Count
         class_counts = $classCounts
@@ -660,10 +672,15 @@ $weights = Train-LogisticRegression -Rows $trainRows -Names $FeatureNames -Means
 $majorityProb = $trainClassCounts["1"] / [double]($trainClassCounts["0"] + $trainClassCounts["1"])
 
 $predictions = New-Object System.Collections.Generic.List[object]
+$trainSplitName = "train_{0}_{1}" -f $TrainStartYear, $TrainEndYear
+$validationSplitName = "validation_{0}" -f $ValidationYear
+$testSplitName = "test_{0}" -f $TestYear
+$latestSplitName = "latest_{0}" -f $LatestCheckYear
 $splits = @(
-    [pscustomobject]@{ Name = "train_2021_2024"; Rows = $trainRows },
-    [pscustomobject]@{ Name = "validation_2025"; Rows = $validationRows },
-    [pscustomobject]@{ Name = "test_2026"; Rows = $testRows }
+    [pscustomobject]@{ Name = $trainSplitName; Rows = $trainRows },
+    [pscustomobject]@{ Name = $validationSplitName; Rows = $validationRows },
+    [pscustomobject]@{ Name = $testSplitName; Rows = $testRows },
+    [pscustomobject]@{ Name = $latestSplitName; Rows = $latestRows }
 )
 
 foreach ($split in $splits) {
@@ -724,9 +741,10 @@ $status = [ordered]@{
     input_csv = $InputCsv
     total_rows = $featureArray.Count
     labeled_rows = $labeledRows.Count
-    training_split = "2021-2024"
-    validation_split = "2025"
-    test_split = "2026"
+    training_split = "$TrainStartYear-$TrainEndYear"
+    validation_split = "$ValidationYear"
+    test_split = "$TestYear"
+    latest_check_split = "$LatestCheckYear"
     class_counts = $classCounts
     train_class_counts = $trainClassCounts
     model_features = $FeatureNames
@@ -748,7 +766,7 @@ $lines = @(
     "## 設計",
     "",
     '- 目標變數：`is_reduced`。',
-    "- 時間切分：2021-2024 訓練、2025 驗證、2026 測試。",
+    "- 時間切分：$TrainStartYear-$TrainEndYear 訓練、$ValidationYear 驗證、$TestYear 測試、$LatestCheckYear 最新年度檢查。",
     "- 模型：多數類別 baseline、關鍵詞規則 baseline、L2 Logistic Regression。",
     "- 指標：Accuracy、Precision、Recall、F1-score、ROC-AUC。",
     "",

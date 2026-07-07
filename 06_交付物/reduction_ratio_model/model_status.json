@@ -3,9 +3,10 @@
     "input_csv":  "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\ai_rag_annotation\\annotation_workbook.csv",
     "total_rows":  120,
     "usable_target_rows":  115,
-    "training_split":  "2021-2024",
-    "validation_split":  "2025",
-    "test_split":  "2026",
+    "training_split":  "2021-2023",
+    "validation_split":  "2024",
+    "test_split":  "2025",
+    "latest_check_split":  "2026",
     "target_quality_counts":  {
                                   "missing_claimed_or_allowed_penalty":  3,
                                   "ok":  115,

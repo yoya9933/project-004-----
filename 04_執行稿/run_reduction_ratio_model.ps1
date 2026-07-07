@@ -2,6 +2,11 @@
     [string]$InputCsv,
     [string]$OutputDir,
     [int]$MinTargetRows = 30,
+    [int]$TrainStartYear = 2021,
+    [int]$TrainEndYear = 2023,
+    [int]$ValidationYear = 2024,
+    [int]$TestYear = 2025,
+    [int]$LatestCheckYear = 2026,
     [int]$Iterations = 3000,
     [double]$LearningRate = 0.03,
     [double]$RidgeLambda = 0.05,
@@ -520,6 +525,12 @@ function Write-SkippedStatus {
         target_quality_counts = $Details.target_quality_counts
         model_features = $FeatureNames
         screening_only_features = $ScreeningOnlyFeatures
+        split_policy = [ordered]@{
+            train = "$TrainStartYear-$TrainEndYear"
+            validation = "$ValidationYear"
+            test = "$TestYear"
+            latest_check = "$LatestCheckYear"
+        }
         outputs = $Details.outputs
         note = "Targets are derived only from manually verified claimed_penalty and allowed_penalty. Raw penalty amount is not used as the target."
     }
@@ -546,7 +557,7 @@ function Write-SkippedStatus {
         "",
         '- 先在 `annotation_workbook.csv` 補 `claimed_penalty` 與 `allowed_penalty`。',
         '- `remaining_ratio = allowed_penalty / claimed_penalty`，需落在 0 到 1 之間才會進入模型。',
-        '- 補標後重新執行本腳本，即可依 2021-2024 訓練、2025 驗證、2026 測試輸出 MAE、RMSE、R2 與分段命中率。',
+        "- 補標後重新執行本腳本，即可依 $TrainStartYear-$TrainEndYear 訓練、$ValidationYear 驗證、$TestYear 測試、$LatestCheckYear 最新年度檢查輸出 MAE、RMSE、R2 與分段命中率。",
         "",
         "## 防呆說明",
         "",
@@ -680,12 +691,13 @@ if ($usableRows.Count -lt $MinTargetRows) {
     exit 0
 }
 
-$trainRows = @($usableRows | Where-Object { [int]$_.decision_year -ge 2021 -and [int]$_.decision_year -le 2024 })
-$validationRows = @($usableRows | Where-Object { [int]$_.decision_year -eq 2025 })
-$testRows = @($usableRows | Where-Object { [int]$_.decision_year -eq 2026 })
+$trainRows = @($usableRows | Where-Object { [int]$_.decision_year -ge $TrainStartYear -and [int]$_.decision_year -le $TrainEndYear })
+$validationRows = @($usableRows | Where-Object { [int]$_.decision_year -eq $ValidationYear })
+$testRows = @($usableRows | Where-Object { [int]$_.decision_year -eq $TestYear })
+$latestRows = @($usableRows | Where-Object { [int]$_.decision_year -eq $LatestCheckYear })
 
 if ($trainRows.Count -lt 10) {
-    Write-SkippedStatus -Reason "not_enough_training_rows_in_2021_2024" -Details @{
+    Write-SkippedStatus -Reason "not_enough_training_rows_in_train_split" -Details @{
         total_rows = $modelArray.Count
         usable_target_rows = $usableRows.Count
         target_quality_counts = $qualityCounts
@@ -701,10 +713,15 @@ $lassoWeights = Train-LinearModel -Rows $trainRows -Names $FeatureNames -Means $
 $meanRemainingRatio = ($trainRows | ForEach-Object { [double]$_.remaining_ratio } | Measure-Object -Average).Average
 
 $predictions = New-Object System.Collections.Generic.List[object]
+$trainSplitName = "train_{0}_{1}" -f $TrainStartYear, $TrainEndYear
+$validationSplitName = "validation_{0}" -f $ValidationYear
+$testSplitName = "test_{0}" -f $TestYear
+$latestSplitName = "latest_{0}" -f $LatestCheckYear
 $splits = @(
-    [pscustomobject]@{ Name = "train_2021_2024"; Rows = $trainRows },
-    [pscustomobject]@{ Name = "validation_2025"; Rows = $validationRows },
-    [pscustomobject]@{ Name = "test_2026"; Rows = $testRows }
+    [pscustomobject]@{ Name = $trainSplitName; Rows = $trainRows },
+    [pscustomobject]@{ Name = $validationSplitName; Rows = $validationRows },
+    [pscustomobject]@{ Name = $testSplitName; Rows = $testRows },
+    [pscustomobject]@{ Name = $latestSplitName; Rows = $latestRows }
 )
 
 foreach ($split in $splits) {
@@ -769,9 +786,10 @@ $status = [ordered]@{
     input_csv = $InputCsv
     total_rows = $modelArray.Count
     usable_target_rows = $usableRows.Count
-    training_split = "2021-2024"
-    validation_split = "2025"
-    test_split = "2026"
+    training_split = "$TrainStartYear-$TrainEndYear"
+    validation_split = "$ValidationYear"
+    test_split = "$TestYear"
+    latest_check_split = "$LatestCheckYear"
     target_quality_counts = $qualityCounts
     model_features = $FeatureNames
     screening_only_features = $ScreeningOnlyFeatures
@@ -796,7 +814,7 @@ $lines = @(
     "",
     '- 目標變數：`remaining_ratio = allowed_penalty / claimed_penalty`。',
     '- 衍生變數：`reduction_rate = 1 - remaining_ratio`。',
-    "- 時間切分：2021-2024 訓練、2025 驗證、2026 測試。",
+    "- 時間切分：$TrainStartYear-$TrainEndYear 訓練、$ValidationYear 驗證、$TestYear 測試、$LatestCheckYear 最新年度檢查。",
     "- 模型：mean baseline、Ridge Regression、Lasso Regression。",
     "- 指標：MAE、RMSE、R2、分段命中率。",
     "",
