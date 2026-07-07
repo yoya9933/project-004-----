@@ -1,0 +1,62 @@
+﻿{
+    "status":  "ok",
+    "input_csv":  ".\\06_交付物\\ai_rag_annotation\\annotation_workbook_ai_assumed_review.csv",
+    "total_rows":  120,
+    "usable_target_rows":  115,
+    "training_split":  "2021-2024",
+    "validation_split":  "2025",
+    "test_split":  "2026",
+    "target_quality_counts":  {
+                                  "missing_claimed_or_allowed_penalty":  3,
+                                  "ok":  115,
+                                  "remaining_ratio_out_of_0_1_range":  2
+                              },
+    "model_features":  [
+                           "x_log_contract_price",
+                           "x_log_claimed_penalty",
+                           "x_claim_to_contract_ratio",
+                           "x_delay_days",
+                           "x_penalty_per_delay_day",
+                           "x_issue_owner_fault",
+                           "x_issue_contractor_fault",
+                           "x_issue_extension_request",
+                           "x_issue_actual_damage_unclear",
+                           "x_issue_partial_completion",
+                           "x_issue_used_by_owner",
+                           "x_ai_issue_owner_fault",
+                           "x_ai_issue_contractor_fault",
+                           "x_ai_issue_extension_request",
+                           "x_ai_issue_actual_damage_unclear",
+                           "x_ai_issue_partial_completion",
+                           "x_ai_issue_used_by_owner",
+                           "x_money_candidate_count",
+                           "x_delay_candidate_count"
+                       ],
+    "screening_only_features":  [
+                                    "x_relevance_score",
+                                    "x_penalty_term_count",
+                                    "x_delay_term_count",
+                                    "x_strong_reduction_term_count",
+                                    "x_has_mfa_252",
+                                    "x_has_discretion",
+                                    "x_has_over_high"
+                                ],
+    "models":  [
+                   "mean_baseline",
+                   "ridge_regression_l2",
+                   "lasso_regression_l1"
+               ],
+    "planned_package_models":  [
+                                   "RandomForestRegressor",
+                                   "LightGBMRegressor"
+                               ],
+    "outputs":  {
+                    "ratio_model_frame":  ".\\06_交付物\\reduction_ratio_model_ai_assumed\\ratio_model_frame.csv",
+                    "usable_ratio_model_frame":  ".\\06_交付物\\reduction_ratio_model_ai_assumed\\usable_ratio_model_frame.csv",
+                    "target_quality_summary":  ".\\06_交付物\\reduction_ratio_model_ai_assumed\\target_quality_summary.csv",
+                    "metrics":  ".\\06_交付物\\reduction_ratio_model_ai_assumed\\metrics.csv",
+                    "predictions":  ".\\06_交付物\\reduction_ratio_model_ai_assumed\\predictions.csv",
+                    "model_coefficients":  ".\\06_交付物\\reduction_ratio_model_ai_assumed\\model_coefficients.csv"
+                },
+    "note":  "Models predict remaining_ratio. reduction_rate is derived as 1 - remaining_ratio. Raw amount is not used as target."
+}
