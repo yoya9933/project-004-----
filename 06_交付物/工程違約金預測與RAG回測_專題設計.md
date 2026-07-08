@@ -201,11 +201,12 @@ AI 假設版比例回測已產出於 `06_交付物/reduction_ratio_model/`，另
 
 最後成果可設計成一個輔助評估流程，而不是法院判決預測器。
 
-目前已完成第一版本機靜態網頁原型：
+目前已完成 Streamlit 版工具，並保留原靜態版資料包：
 
 - 資料打包腳本：`04_執行稿/build_risk_assessment_tool_data.py`。
-- 工具位置：`06_交付物/risk_assessment_tool/`。
-- 啟動方式：在 `06_交付物/risk_assessment_tool/` 執行 `python -m http.server 8000`，再開啟 `http://localhost:8000`。
+- 工具入口：`streamlit_app.py`。
+- 資料位置：`06_交付物/risk_assessment_tool/data/risk_tool_data.json`。
+- 啟動方式：在專案根目錄執行 `streamlit run streamlit_app.py`，再開啟 `http://localhost:8501`。
 - 支援範圍：展示 120 件既有案件，不支援新案件手動輸入。
 - 展示主軸：數值預測展示，並保留模型比較、重要特徵、RAG 相似案例與人工查核提醒。
 
