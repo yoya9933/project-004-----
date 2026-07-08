@@ -9,6 +9,7 @@ from typing import Any
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 APP_PATH = PROJECT_ROOT / "streamlit_app.py"
+README_PATH = PROJECT_ROOT / "README.md"
 REQUIREMENTS_PATH = PROJECT_ROOT / "requirements.txt"
 DATA_PATH = PROJECT_ROOT / "06_交付物" / "risk_assessment_tool" / "data" / "risk_tool_data.json"
 OUTPUT_DIR = PROJECT_ROOT / "05_測試與驗證"
@@ -27,6 +28,7 @@ def validate() -> dict[str, Any]:
     failures: list[str] = []
 
     require(APP_PATH.exists(), f"Missing root Streamlit app: {APP_PATH}", failures)
+    require(README_PATH.exists(), f"Missing root README: {README_PATH}", failures)
     require(REQUIREMENTS_PATH.exists(), f"Missing requirements file: {REQUIREMENTS_PATH}", failures)
     require(DATA_PATH.exists(), f"Missing risk tool data: {DATA_PATH}", failures)
 
@@ -53,6 +55,10 @@ def validate() -> dict[str, Any]:
 
     requirements = REQUIREMENTS_PATH.read_text(encoding="utf-8") if REQUIREMENTS_PATH.exists() else ""
     require("streamlit" in requirements.lower(), "requirements.txt does not include streamlit", failures)
+
+    readme = README_PATH.read_text(encoding="utf-8") if README_PATH.exists() else ""
+    for required_text in ["streamlit run streamlit_app.py", "requirements.txt", "risk_tool_data.json"]:
+        require(required_text in readme, f"README.md missing text: {required_text}", failures)
 
     payload = load_json(DATA_PATH) if DATA_PATH.exists() else {}
     cases = payload.get("cases", [])
@@ -88,6 +94,7 @@ def validate() -> dict[str, Any]:
         "failures": failures,
         "checks": {
             "appPath": str(APP_PATH.relative_to(PROJECT_ROOT)),
+            "readmePath": str(README_PATH.relative_to(PROJECT_ROOT)),
             "compileOk": compile_ok,
             "streamlitInstalled": streamlit_available,
             "caseCount": len(cases),
@@ -109,6 +116,7 @@ def write_report(status: dict[str, Any]) -> None:
         "",
         f"- 狀態：{status['status']}",
         f"- App 位置：`{status['checks']['appPath']}`",
+        f"- README 位置：`{status['checks']['readmePath']}`",
         f"- Python 編譯：{status['checks']['compileOk']}",
         f"- 本機已安裝 Streamlit：{status['checks']['streamlitInstalled']}",
         f"- 案件數：{status['checks']['caseCount']}",

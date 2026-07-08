@@ -2,8 +2,9 @@
 
 ## Streamlit 啟動
 
+在本專案根目錄執行：
+
 ```powershell
-cd <project-004-工程分析>
 python -m pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
@@ -14,12 +15,23 @@ streamlit run streamlit_app.py
 http://localhost:8501
 ```
 
-`streamlit_app.py` 放在專案最外層，資料來源為本資料夾內的 `data/risk_tool_data.json`。
+若 8501 port 已被占用，可改用：
+
+```powershell
+streamlit run streamlit_app.py --server.port 8518
+```
+
+## 專案入口
+
+- Streamlit app：`streamlit_app.py`
+- Python 依賴：`requirements.txt`
+- 工具資料：`06_交付物/risk_assessment_tool/data/risk_tool_data.json`
+- 資料打包腳本：`04_執行稿/build_risk_assessment_tool_data.py`
+- Streamlit 驗證腳本：`04_執行稿/validate_streamlit_app.py`
 
 ## 資料重建
 
 ```powershell
-cd <project-004-工程分析>
 python .\04_執行稿\build_risk_assessment_tool_data.py
 ```
 
@@ -35,7 +47,6 @@ python .\04_執行稿\build_risk_assessment_tool_data.py
 ## 測試
 
 ```powershell
-cd <project-004-工程分析>
 python .\04_執行稿\validate_streamlit_app.py
 ```
 
@@ -44,8 +55,8 @@ python .\04_執行稿\validate_streamlit_app.py
 - `05_測試與驗證/streamlit_app_validation.json`
 - `05_測試與驗證/streamlit_app_validation.md`
 
-原靜態 HTML/CSS/JS 檔案仍保留於本資料夾，作為舊版展示與資料包結構參考。
-
 ## 限制
 
 目前資料為 AI 假設版標註與回測展示，不是法律意見；正式結論須回到原判決全文人工查核。
+
+原靜態 HTML/CSS/JS 檔案仍保留於 `06_交付物/risk_assessment_tool/`，作為舊版展示與資料包結構參考。

@@ -3,7 +3,7 @@
 - 狀態：ok
 - App 位置：`streamlit_app.py`
 - Python 編譯：True
-- 本機已安裝 Streamlit：False
+- 本機已安裝 Streamlit：True
 - 案件數：120
 - 相似案例數：600
 - 特徵貢獻數：6840
