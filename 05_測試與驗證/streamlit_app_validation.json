@@ -3,6 +3,7 @@
   "failures": [],
   "checks": {
     "appPath": "streamlit_app.py",
+    "readmePath": "README.md",
     "compileOk": true,
     "streamlitInstalled": true,
     "caseCount": 120,

@@ -2,6 +2,7 @@
 
 - 狀態：ok
 - App 位置：`streamlit_app.py`
+- README 位置：`README.md`
 - Python 編譯：True
 - 本機已安裝 Streamlit：True
 - 案件數：120
