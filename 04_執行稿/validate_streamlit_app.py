@@ -116,7 +116,7 @@ def validate() -> dict[str, Any]:
 
     missing_similar = 0
     for item in annotation_rows:
-        jid = item.get("JID")
+        jid = item.get("JID", "")
         if len(similar_by_jid.get(jid, [])) != 5:
             missing_similar += 1
     require(missing_similar == 0, f"Cases missing 5 similar cases: {missing_similar}", failures)
@@ -133,8 +133,9 @@ def validate() -> dict[str, Any]:
     if APP_PATH.exists() and streamlit_available and pandas_available and sklearn_available:
         try:
             spec = importlib.util.spec_from_file_location("streamlit_app_validation_target", APP_PATH)
+            if spec is None or spec.loader is None:
+                raise ImportError(f"Cannot load module spec from {APP_PATH}")
             app_module = importlib.util.module_from_spec(spec)
-            assert spec is not None and spec.loader is not None
             spec.loader.exec_module(app_module)
             live_result = app_module.run_live_training()
             live_training_case_count = len(live_result["cases"])
@@ -142,7 +143,7 @@ def validate() -> dict[str, Any]:
             live_feature_contribution_count = live_result["metadata"].get("featureContributionCount", 0)
             required_models = {"logistic_regression_l2", "ridge_regression_l2", "lasso_regression_l1"}
             for item in live_result["cases"]:
-                jid = item.get("jid")
+                jid = str(item.get("jid", ""))
                 if not required_models.issubset(set(live_result["contributionsByJid"].get(jid, {}).keys())):
                     missing_models += 1
             live_training_ok = live_training_case_count == 120 and live_training_ratio_count >= 100
