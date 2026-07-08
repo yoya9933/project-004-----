@@ -1,0 +1,14 @@
+{
+  "status": "ok",
+  "failures": [],
+  "checks": {
+    "appPath": "streamlit_app.py",
+    "compileOk": true,
+    "streamlitInstalled": false,
+    "caseCount": 120,
+    "similarCaseCount": 600,
+    "featureContributionCount": 6840,
+    "missingSimilar": 0,
+    "missingContributionModels": 0
+  }
+}
