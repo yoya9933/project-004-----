@@ -452,29 +452,32 @@ def render_sidebar(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[
         col3.button("2026 最新", use_container_width=True, on_click=apply_preset, args=("latest2026",))
         col4.button("清除", use_container_width=True, on_click=apply_preset, args=("clear",))
 
+    filtered = filter_cases(cases)
+    labels = case_label_map(filtered)
+    selected_jid = None
+
+    with st.sidebar:
+        if filtered:
+            jids = [str(item.get("jid")) for item in filtered]
+            if st.session_state.get("selected_jid") not in jids:
+                st.session_state.selected_jid = preferred_jid(filtered)
+            selected_jid = st.selectbox(
+                "案件",
+                jids,
+                key="selected_jid",
+                format_func=lambda jid: labels.get(jid, jid),
+            )
+        else:
+            st.warning("沒有符合條件的案件")
+
         st.text_input("搜尋", placeholder="案號、案名、法院", key="search_query")
         st.selectbox("年度", ["全部年度", *years], key="year_filter")
         st.selectbox("切分", ["全部切分", *splits], key="split_filter", format_func=split_label)
         st.selectbox("風險", ["全部風險", "高", "中", "低"], key="risk_filter")
 
-    filtered = filter_cases(cases)
-    labels = case_label_map(filtered)
-
-    with st.sidebar:
         st.markdown(f"**符合條件：{len(filtered)} 件**")
         if not filtered:
-            st.warning("沒有符合條件的案件")
             return filtered, None
-
-        jids = [str(item.get("jid")) for item in filtered]
-        if st.session_state.get("selected_jid") not in jids:
-            st.session_state.selected_jid = preferred_jid(filtered)
-        selected_jid = st.selectbox(
-            "案件",
-            jids,
-            key="selected_jid",
-            format_func=lambda jid: labels.get(jid, jid),
-        )
 
         download_data = json.dumps(filtered, ensure_ascii=False, indent=2)
         st.download_button(
