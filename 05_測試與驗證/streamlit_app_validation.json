@@ -6,9 +6,14 @@
     "readmePath": "README.md",
     "compileOk": true,
     "streamlitInstalled": true,
+    "pandasInstalled": true,
+    "sklearnInstalled": true,
+    "liveTrainingOk": true,
+    "liveTrainingCaseCount": 120,
+    "liveTrainingUsableRatioRows": 115,
     "caseCount": 120,
     "similarCaseCount": 600,
-    "featureContributionCount": 6840,
+    "featureContributionCount": 2880,
     "missingSimilar": 0,
     "missingContributionModels": 0
   }

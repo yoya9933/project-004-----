@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import importlib.util
 import json
 import py_compile
@@ -11,7 +12,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 APP_PATH = PROJECT_ROOT / "streamlit_app.py"
 README_PATH = PROJECT_ROOT / "README.md"
 REQUIREMENTS_PATH = PROJECT_ROOT / "requirements.txt"
-DATA_PATH = PROJECT_ROOT / "06_交付物" / "risk_assessment_tool" / "data" / "risk_tool_data.json"
+ANNOTATION_PATH = PROJECT_ROOT / "06_交付物" / "ai_rag_annotation" / "annotation_workbook.csv"
+SIMILAR_CASES_PATH = PROJECT_ROOT / "06_交付物" / "rag_model_explanation" / "similar_case_evidence.csv"
 OUTPUT_DIR = PROJECT_ROOT / "05_測試與驗證"
 
 
@@ -24,13 +26,19 @@ def load_json(path: Path) -> dict[str, Any]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def load_csv(path: Path) -> list[dict[str, str]]:
+    with path.open("r", encoding="utf-8-sig", newline="") as handle:
+        return list(csv.DictReader(handle))
+
+
 def validate() -> dict[str, Any]:
     failures: list[str] = []
 
     require(APP_PATH.exists(), f"Missing root Streamlit app: {APP_PATH}", failures)
     require(README_PATH.exists(), f"Missing root README: {README_PATH}", failures)
     require(REQUIREMENTS_PATH.exists(), f"Missing requirements file: {REQUIREMENTS_PATH}", failures)
-    require(DATA_PATH.exists(), f"Missing risk tool data: {DATA_PATH}", failures)
+    require(ANNOTATION_PATH.exists(), f"Missing annotation workbook: {ANNOTATION_PATH}", failures)
+    require(SIMILAR_CASES_PATH.exists(), f"Missing similar case evidence: {SIMILAR_CASES_PATH}", failures)
 
     compile_ok = False
     if APP_PATH.exists():
@@ -43,7 +51,17 @@ def validate() -> dict[str, Any]:
     source = APP_PATH.read_text(encoding="utf-8") if APP_PATH.exists() else ""
     for required_text in [
         "streamlit as st",
-        "DATA_PATH",
+        "ANNOTATION_PATH",
+        "run_live_training",
+        "merge_training_results",
+        "is_case_trained",
+        "render_untrained_model_notice",
+        "color: var(--tool-ink);",
+        '[data-testid="stToolbar"]',
+        '[data-testid="stHeader"]',
+        "#MainMenu",
+        "尚未現場訓練，模型比較會在訓練後顯示",
+        "現場訓練模型",
         "render_sidebar",
         "案件儀表板",
         "資料總覽",
@@ -53,41 +71,79 @@ def validate() -> dict[str, Any]:
     ]:
         require(required_text in source, f"streamlit_app.py missing text: {required_text}", failures)
 
+    for removed_text in [
+        'st.selectbox("風險"',
+        '"高風險"',
+        'class="risk-badge',
+        '"風險": item.get("riskLevel")',
+        "**風險分布**",
+        "**風險規則**",
+        "酌減區間",
+        "區間：",
+        "actualBucket",
+        "ridgePredictedBucket",
+        "lassoPredictedBucket",
+        "reduction_bucket",
+        "def reduction_bucket",
+    ]:
+        require(removed_text not in source, f"streamlit_app.py still contains removed UI/data field: {removed_text}", failures)
+
     requirements = REQUIREMENTS_PATH.read_text(encoding="utf-8") if REQUIREMENTS_PATH.exists() else ""
-    require("streamlit" in requirements.lower(), "requirements.txt does not include streamlit", failures)
+    requirements_lower = requirements.lower()
+    require("streamlit" in requirements_lower, "requirements.txt does not include streamlit", failures)
+    require("pandas" in requirements_lower, "requirements.txt does not include pandas", failures)
+    require("scikit-learn" in requirements_lower, "requirements.txt does not include scikit-learn", failures)
 
     readme = README_PATH.read_text(encoding="utf-8") if README_PATH.exists() else ""
-    for required_text in ["streamlit run streamlit_app.py", "requirements.txt", "risk_tool_data.json"]:
+    for required_text in ["streamlit run streamlit_app.py", "requirements.txt", "annotation_workbook.csv", "現場訓練"]:
         require(required_text in readme, f"README.md missing text: {required_text}", failures)
+    require("酌減區間" not in readme, "README.md still mentions removed bucket metric", failures)
 
-    payload = load_json(DATA_PATH) if DATA_PATH.exists() else {}
-    cases = payload.get("cases", [])
-    similar_by_jid = payload.get("similarCasesByJid", {})
-    contributions_by_jid = payload.get("contributionsByJid", {})
-    metadata = payload.get("metadata", {})
+    annotation_rows = load_csv(ANNOTATION_PATH) if ANNOTATION_PATH.exists() else []
+    similar_rows = load_csv(SIMILAR_CASES_PATH) if SIMILAR_CASES_PATH.exists() else []
+    similar_by_jid: dict[str, list[dict[str, str]]] = {}
+    for row in similar_rows:
+        similar_by_jid.setdefault(row.get("query_JID", ""), []).append(row)
 
-    require(metadata.get("caseCount") == 120, f"metadata.caseCount != 120: {metadata.get('caseCount')}", failures)
-    require(len(cases) == 120, f"cases length != 120: {len(cases)}", failures)
-    require(metadata.get("similarCaseCount") == 600, f"similarCaseCount != 600: {metadata.get('similarCaseCount')}", failures)
-    require(
-        metadata.get("featureContributionCount") == 6840,
-        f"featureContributionCount != 6840: {metadata.get('featureContributionCount')}",
-        failures,
-    )
+    require(len(annotation_rows) == 120, f"annotation row count != 120: {len(annotation_rows)}", failures)
+    require(len(similar_rows) == 600, f"similar evidence count != 600: {len(similar_rows)}", failures)
 
     missing_similar = 0
-    missing_models = 0
-    required_models = {"logistic_regression_l2", "ridge_regression_l2", "lasso_regression_l1"}
-    for item in cases:
-        jid = item.get("jid")
+    for item in annotation_rows:
+        jid = item.get("JID")
         if len(similar_by_jid.get(jid, [])) != 5:
             missing_similar += 1
-        if not required_models.issubset(set(contributions_by_jid.get(jid, {}).keys())):
-            missing_models += 1
     require(missing_similar == 0, f"Cases missing 5 similar cases: {missing_similar}", failures)
-    require(missing_models == 0, f"Cases missing contribution models: {missing_models}", failures)
 
     streamlit_available = importlib.util.find_spec("streamlit") is not None
+    pandas_available = importlib.util.find_spec("pandas") is not None
+    sklearn_available = importlib.util.find_spec("sklearn") is not None
+
+    live_training_ok = False
+    live_training_case_count = 0
+    live_training_ratio_count = 0
+    live_feature_contribution_count = 0
+    missing_models = 0
+    if APP_PATH.exists() and streamlit_available and pandas_available and sklearn_available:
+        try:
+            spec = importlib.util.spec_from_file_location("streamlit_app_validation_target", APP_PATH)
+            app_module = importlib.util.module_from_spec(spec)
+            assert spec is not None and spec.loader is not None
+            spec.loader.exec_module(app_module)
+            live_result = app_module.run_live_training()
+            live_training_case_count = len(live_result["cases"])
+            live_training_ratio_count = live_result["metadata"].get("usableRatioRows", 0)
+            live_feature_contribution_count = live_result["metadata"].get("featureContributionCount", 0)
+            required_models = {"logistic_regression_l2", "ridge_regression_l2", "lasso_regression_l1"}
+            for item in live_result["cases"]:
+                jid = item.get("jid")
+                if not required_models.issubset(set(live_result["contributionsByJid"].get(jid, {}).keys())):
+                    missing_models += 1
+            live_training_ok = live_training_case_count == 120 and live_training_ratio_count >= 100
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"live training failed: {exc}")
+    require(live_training_ok, "live training did not produce expected case predictions", failures)
+    require(missing_models == 0, f"Cases missing live contribution models: {missing_models}", failures)
 
     return {
         "status": "ok" if not failures else "failed",
@@ -97,9 +153,14 @@ def validate() -> dict[str, Any]:
             "readmePath": str(README_PATH.relative_to(PROJECT_ROOT)),
             "compileOk": compile_ok,
             "streamlitInstalled": streamlit_available,
-            "caseCount": len(cases),
-            "similarCaseCount": sum(len(items) for items in similar_by_jid.values()),
-            "featureContributionCount": metadata.get("featureContributionCount"),
+            "pandasInstalled": pandas_available,
+            "sklearnInstalled": sklearn_available,
+            "liveTrainingOk": live_training_ok,
+            "liveTrainingCaseCount": live_training_case_count,
+            "liveTrainingUsableRatioRows": live_training_ratio_count,
+            "caseCount": len(annotation_rows),
+            "similarCaseCount": len(similar_rows),
+            "featureContributionCount": live_feature_contribution_count,
             "missingSimilar": missing_similar,
             "missingContributionModels": missing_models,
         },
@@ -119,6 +180,11 @@ def write_report(status: dict[str, Any]) -> None:
         f"- README 位置：`{status['checks']['readmePath']}`",
         f"- Python 編譯：{status['checks']['compileOk']}",
         f"- 本機已安裝 Streamlit：{status['checks']['streamlitInstalled']}",
+        f"- 本機已安裝 pandas：{status['checks']['pandasInstalled']}",
+        f"- 本機已安裝 scikit-learn：{status['checks']['sklearnInstalled']}",
+        f"- 現場訓練可執行：{status['checks']['liveTrainingOk']}",
+        f"- 現場訓練案件數：{status['checks']['liveTrainingCaseCount']}",
+        f"- 現場訓練可用比例樣本數：{status['checks']['liveTrainingUsableRatioRows']}",
         f"- 案件數：{status['checks']['caseCount']}",
         f"- 相似案例數：{status['checks']['similarCaseCount']}",
         f"- 特徵貢獻數：{status['checks']['featureContributionCount']}",

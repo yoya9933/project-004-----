@@ -25,21 +25,19 @@ streamlit run streamlit_app.py --server.port 8518
 
 - Streamlit app：`streamlit_app.py`
 - Python 依賴：`requirements.txt`
-- 工具資料：`06_交付物/risk_assessment_tool/data/risk_tool_data.json`
-- 資料打包腳本：`04_執行稿/build_risk_assessment_tool_data.py`
+- 現場訓練輸入：`06_交付物/ai_rag_annotation/annotation_workbook.csv`
+- RAG 相似案例輸入：`06_交付物/rag_model_explanation/similar_case_evidence.csv`
 - Streamlit 驗證腳本：`04_執行稿/validate_streamlit_app.py`
 
-## 資料重建
+## 現場訓練
 
-```powershell
-python .\04_執行稿\build_risk_assessment_tool_data.py
-```
+Streamlit 開啟後不會自動訓練模型。請在左側側欄按「現場訓練模型」，app 會直接從 `annotation_workbook.csv` 產生特徵、切分資料、訓練 Logistic / Ridge / Lasso，並把結果暫存在本次 Streamlit session。
 
 ## 內容
 
 - 120 件既有案件。
-- Streamlit 側欄支援搜尋、年度/切分/風險篩選，以及高風險、2025 測試、2026 最新年度展示快捷鍵。
-- 每案顯示酌減機率、預測准許比例、預測酌減率、酌減區間與風險等級。
+- Streamlit 側欄支援搜尋、年度/切分篩選，以及 2025 測試、2026 最新年度展示快捷鍵。
+- 按下現場訓練後，每案顯示酌減機率、預測准許比例與預測酌減率。
 - 顯示 Ridge、Lasso、mean baseline 的准許比例比較。
 - 顯示重要模型特徵與前 5 件 RAG 相似案例。
 - 支援下載目前篩選後的案件 JSON。
