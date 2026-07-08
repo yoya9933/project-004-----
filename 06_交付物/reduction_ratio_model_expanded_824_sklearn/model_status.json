@@ -1,0 +1,57 @@
+{
+  "status": "ok",
+  "implementation": "run_reduction_ratio_model_sklearn.py",
+  "usable_frame": "06_交付物\\reduction_ratio_model_expanded_824\\usable_ratio_model_frame.csv",
+  "model_frame": "06_交付物\\reduction_ratio_model_expanded_824\\ratio_model_frame.csv",
+  "total_rows": 824,
+  "usable_target_rows": 765,
+  "training_split": "2021-2023",
+  "validation_split": "2024",
+  "test_split": "2025",
+  "latest_check_split": "2026",
+  "target_quality_counts": {
+    "claimed_penalty_nonpositive": 1,
+    "missing_claimed_or_allowed_penalty": 48,
+    "ok": 765,
+    "remaining_ratio_out_of_0_1_range": 10
+  },
+  "feature_names": [
+    "x_log_contract_price",
+    "x_log_claimed_penalty",
+    "x_claim_to_contract_ratio",
+    "x_delay_days",
+    "x_penalty_per_delay_day",
+    "x_issue_owner_fault",
+    "x_issue_contractor_fault",
+    "x_issue_extension_request",
+    "x_issue_actual_damage_unclear",
+    "x_issue_partial_completion",
+    "x_issue_used_by_owner",
+    "x_ai_issue_owner_fault",
+    "x_ai_issue_contractor_fault",
+    "x_ai_issue_extension_request",
+    "x_ai_issue_actual_damage_unclear",
+    "x_ai_issue_partial_completion",
+    "x_ai_issue_used_by_owner",
+    "x_money_candidate_count",
+    "x_delay_candidate_count"
+  ],
+  "models": [
+    "mean_baseline",
+    "ridge_regression_l2",
+    "lasso_regression_l1",
+    "elastic_net",
+    "random_forest",
+    "extra_trees",
+    "gradient_boosting",
+    "hist_gradient_boosting"
+  ],
+  "selection_policy": "For each model family, select the candidate with the lowest validation RMSE, trained on 2021-2023 only.",
+  "outputs": {
+    "metrics": "06_交付物\\reduction_ratio_model_expanded_824_sklearn\\metrics.csv",
+    "predictions": "06_交付物\\reduction_ratio_model_expanded_824_sklearn\\predictions.csv",
+    "selected_models": "06_交付物\\reduction_ratio_model_expanded_824_sklearn\\selected_models.csv",
+    "validation_search": "06_交付物\\reduction_ratio_model_expanded_824_sklearn\\validation_search.csv"
+  },
+  "note": "Predictions are clipped to 0-1 before metrics, matching the existing ratio-model evaluation behavior."
+}

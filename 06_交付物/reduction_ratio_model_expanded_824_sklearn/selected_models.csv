@@ -1,0 +1,9 @@
+﻿model,selected_candidate
+mean_baseline,mean_baseline
+ridge_regression_l2,ridge_alpha_100
+lasso_regression_l1,lasso_alpha_0.005
+elastic_net,elastic_alpha_0.005_l1_0.8
+random_forest,rf_depth_3_leaf_5
+extra_trees,extra_depth_3_leaf_10
+gradient_boosting,gbr_depth_1_lr_0.01_leaf_10
+hist_gradient_boosting,hist_lr_0.01_leaf_30_l2_1

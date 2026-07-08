@@ -1,0 +1,13 @@
+﻿model,split,n,mae,rmse,r2,bucket_accuracy
+mean_baseline,train_2021_2023,425,0.3346,0.3688,-0.0,0.1788
+mean_baseline,validation_2024,141,0.3522,0.3817,-0.0019,0.1277
+mean_baseline,test_2025,164,0.3351,0.3699,-0.0013,0.1585
+mean_baseline,latest_2026,35,0.3328,0.3749,-0.0085,0.1714
+ridge_regression_l2,train_2021_2023,425,0.3234,0.36,0.0473,0.1788
+ridge_regression_l2,validation_2024,141,0.3445,0.3792,0.0112,0.1418
+ridge_regression_l2,test_2025,164,0.3343,0.3731,-0.0186,0.1341
+ridge_regression_l2,latest_2026,35,0.3616,0.4019,-0.1588,0.1429
+lasso_regression_l1,train_2021_2023,425,0.3273,0.3617,0.0382,0.1718
+lasso_regression_l1,validation_2024,141,0.3471,0.3793,0.0107,0.1277
+lasso_regression_l1,test_2025,164,0.3344,0.3711,-0.0077,0.1341
+lasso_regression_l1,latest_2026,35,0.3461,0.3906,-0.0942,0.1714
