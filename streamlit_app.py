@@ -5,6 +5,7 @@ import html
 import json
 import math
 from pathlib import Path
+from textwrap import dedent
 from typing import Any
 
 import streamlit as st
@@ -62,6 +63,18 @@ def safe(value: Any) -> str:
     return html.escape(str(value if value is not None else ""))
 
 
+def html_block(markup: str) -> str:
+    return "\n".join(line.strip() for line in dedent(markup).strip().splitlines())
+
+
+def render_html(markup: str) -> None:
+    body = html_block(markup)
+    if hasattr(st, "html"):
+        st.html(body)
+    else:
+        st.markdown(body, unsafe_allow_html=True)
+
+
 def clamp_ratio(value: Any) -> float:
     if not is_number(value):
         return 0.0
@@ -80,7 +93,7 @@ def load_payload() -> dict[str, Any]:
 
 
 def install_style() -> None:
-    st.markdown(
+    render_html(
         """
         <style>
           :root {
@@ -109,6 +122,8 @@ def install_style() -> None:
             border: 1px solid var(--tool-line);
             border-radius: 8px;
             background: var(--tool-surface);
+            min-width: 0;
+            overflow-wrap: anywhere;
           }
           .tool-title h1 {
             margin: 0;
@@ -127,6 +142,7 @@ def install_style() -> None:
             color: var(--tool-muted);
             font-size: 0.9rem;
             line-height: 1.6;
+            overflow-wrap: anywhere;
           }
           .risk-badge {
             min-width: 5.8rem;
@@ -145,6 +161,8 @@ def install_style() -> None:
             border-radius: 8px;
             padding: 1rem;
             background: var(--tool-surface);
+            min-width: 0;
+            overflow-wrap: anywhere;
           }
           .panel h3 {
             margin: 0 0 0.75rem 0;
@@ -153,11 +171,15 @@ def install_style() -> None:
           }
           .bar-row {
             display: grid;
-            grid-template-columns: 8rem minmax(0, 1fr) 4.5rem;
+            grid-template-columns: minmax(6rem, 8rem) minmax(0, 1fr) minmax(3.8rem, 4.5rem);
             gap: 0.65rem;
             align-items: center;
             margin: 0.55rem 0;
             font-size: 0.93rem;
+          }
+          .bar-row > span {
+            min-width: 0;
+            overflow-wrap: anywhere;
           }
           .bar-label {
             font-weight: 800;
@@ -187,6 +209,7 @@ def install_style() -> None:
             gap: 0.8rem;
             border-top: 1px solid var(--tool-line);
             padding: 0.9rem 0 0.2rem;
+            min-width: 0;
           }
           .similar-score {
             display: grid;
@@ -209,6 +232,7 @@ def install_style() -> None:
             margin: 0.22rem 0 0;
             font-size: 0.9rem;
             line-height: 1.55;
+            overflow-wrap: anywhere;
           }
           .similar-meta,
           .similar-terms {
@@ -222,6 +246,38 @@ def install_style() -> None:
             color: var(--risk-low);
             font-weight: 800;
           }
+          .feature-table {
+            display: grid;
+            gap: 0.35rem;
+            margin-top: 0.6rem;
+          }
+          .feature-grid {
+            display: grid;
+            grid-template-columns: minmax(9rem, 1.15fr) minmax(4.5rem, 0.45fr) minmax(4.5rem, 0.45fr) minmax(10rem, 1fr);
+            gap: 0.65rem;
+            align-items: center;
+            padding: 0.62rem 0;
+            border-top: 1px solid var(--tool-line);
+            font-size: 0.9rem;
+          }
+          .feature-grid > span {
+            min-width: 0;
+            overflow-wrap: anywhere;
+          }
+          .feature-header {
+            border-top: 0;
+            padding-top: 0;
+            color: var(--tool-muted);
+            font-size: 0.78rem;
+            font-weight: 900;
+          }
+          .feature-label {
+            font-weight: 850;
+          }
+          .feature-number {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+          }
           .notice {
             border: 1px solid #eadba9;
             border-radius: 8px;
@@ -229,12 +285,34 @@ def install_style() -> None:
             background: #fff8e5;
             color: #5c4a20;
             line-height: 1.7;
+            overflow-wrap: anywhere;
+          }
+          @media (max-width: 900px) {
+            .feature-grid {
+              grid-template-columns: minmax(0, 1fr) minmax(4.5rem, 0.45fr) minmax(4.5rem, 0.45fr);
+            }
+            .feature-grid .feature-interpretation {
+              grid-column: 1 / -1;
+            }
           }
           @media (max-width: 700px) {
             .tool-title,
             .bar-row,
             .similar-card {
               display: block;
+            }
+            .feature-header {
+              display: none;
+            }
+            .feature-grid {
+              display: block;
+            }
+            .feature-grid > span {
+              display: block;
+              margin: 0.2rem 0;
+            }
+            .feature-number {
+              text-align: left;
             }
             .risk-badge,
             .bar-track,
@@ -243,8 +321,7 @@ def install_style() -> None:
             }
           }
         </style>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -396,7 +473,7 @@ def render_sidebar(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[
 def render_header(item: dict[str, Any]) -> None:
     risk_level = str(item.get("riskLevel") or "低")
     risk_class = RISK_CLASS.get(risk_level, "risk-low")
-    st.markdown(
+    render_html(
         f"""
         <div class="tool-title">
           <div>
@@ -406,8 +483,7 @@ def render_header(item: dict[str, Any]) -> None:
           </div>
           <div class="risk-badge {risk_class}">{safe(risk_level)}風險</div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -455,11 +531,11 @@ def render_model_compare(item: dict[str, Any]) -> None:
         </div>
         """
     )
-    st.markdown("\n".join(parts), unsafe_allow_html=True)
+    render_html("\n".join(parts))
 
 
 def render_feature_summary(item: dict[str, Any]) -> None:
-    st.markdown(
+    render_html(
         f"""
         <div class="panel">
           <h3>模型方向摘要</h3>
@@ -468,8 +544,7 @@ def render_feature_summary(item: dict[str, Any]) -> None:
           <p class="muted"><strong>Ridge 較少酌減：</strong>{safe(item.get("topRatioTowardLessReductionRidge") or "—")}</p>
           <p class="muted"><strong>Ridge 較多酌減：</strong>{safe(item.get("topRatioTowardMoreReductionRidge") or "—")}</p>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -487,7 +562,16 @@ def render_features(item: dict[str, Any], contributions: dict[str, Any]) -> None
         st.info("這個模型沒有可顯示的特徵貢獻。")
         return
 
-    visible_rows = []
+    visible_rows = [
+        """
+        <div class="feature-grid feature-header">
+          <span>特徵</span>
+          <span class="feature-number">數值</span>
+          <span class="feature-number">貢獻</span>
+          <span class="feature-interpretation">解讀</span>
+        </div>
+        """
+    ]
     for row in rows[:12]:
         contribution = row.get("contribution")
         contribution_text = num(contribution)
@@ -495,28 +579,21 @@ def render_features(item: dict[str, Any], contributions: dict[str, Any]) -> None
             cls = "feature-positive" if float(contribution) >= 0 else "feature-negative"
             contribution_text = f'<span class="{cls}">{contribution_text}</span>'
         visible_rows.append(
-            "| "
-            + " | ".join(
-                [
-                    safe(row.get("label")),
-                    num(row.get("value")),
-                    contribution_text,
-                    safe(row.get("interpretation")),
-                ]
-            )
-            + " |"
+            f"""
+            <div class="feature-grid">
+              <span class="feature-label">{safe(row.get("label"))}</span>
+              <span class="feature-number">{num(row.get("value"))}</span>
+              <span class="feature-number">{contribution_text}</span>
+              <span class="feature-interpretation">{safe(row.get("interpretation"))}</span>
+            </div>
+            """
         )
 
-    table = [
-        "| 特徵 | 數值 | 貢獻 | 解讀 |",
-        "|---|---:|---:|---|",
-        *visible_rows,
-    ]
     st.markdown(
         "貢獻值來自標準化特徵 × 模型係數，僅解釋目前回測模型方向。",
     )
     st.caption("正負方向依不同模型目標解讀；請搭配人工查核。")
-    st.markdown("\n".join(table), unsafe_allow_html=True)
+    render_html(f'<div class="feature-table">{"".join(visible_rows)}</div>')
 
 
 def render_similar_cases(item: dict[str, Any], similar_by_jid: dict[str, Any]) -> None:
@@ -529,7 +606,7 @@ def render_similar_cases(item: dict[str, Any], similar_by_jid: dict[str, Any]) -
     for row in rows:
         ratio_text = "無比例標註" if not is_number(row.get("remainingRatio")) else f"准許比例 {pct(row.get('remainingRatio'))}"
         snippet = row.get("reductionSnippet") or row.get("delaySnippet") or "無片段"
-        st.markdown(
+        render_html(
             f"""
             <div class="similar-card">
               <div class="similar-score">{num(row.get("score"), 2)}</div>
@@ -540,8 +617,7 @@ def render_similar_cases(item: dict[str, Any], similar_by_jid: dict[str, Any]) -
                 <p class="similar-snippet">{safe(snippet)}</p>
               </div>
             </div>
-            """,
-            unsafe_allow_html=True,
+            """
         )
 
 
@@ -567,15 +643,14 @@ def render_overview(payload: dict[str, Any], filtered: list[dict[str, Any]]) -> 
 def render_notice(payload: dict[str, Any]) -> None:
     metadata = payload["metadata"]
     risk_rule = metadata.get("riskRule", {})
-    st.markdown(
+    render_html(
         f"""
         <div class="notice">
           <strong>限制說明</strong><br>
           {safe(metadata.get("notice") or "本工具僅供展示與回測解釋。")}<br>
           模型成果應定位為爭點分類、風險辨識或酌減可能性回測，不能宣稱可取代法院判斷或直接預測個案結果。
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
     st.markdown("**風險規則**")
     for level in ["高", "中", "低"]:
