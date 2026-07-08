@@ -514,23 +514,21 @@ def render_model_compare(item: dict[str, Any]) -> None:
             </div>
             """
         )
-    parts.append(
-        f"""
-          <div class="detail-box">
-            <strong>AI 假設版回測對照</strong><br>
-            是否酌減：{yes_no(item.get("actualIsReduced"))}；
-            分類預測：{yes_no(item.get("predictedIsReduced"))}；
-            命中：{yes_no(item.get("classificationCorrect"))}<br>
-            實際准許比例：{pct(item.get("actualRemainingRatio"))}；
-            實際酌減率：{pct(item.get("actualReductionRate"))}；
-            區間：{safe(item.get("actualBucket") or "—")}<br>
-            Ridge 誤差：{num(item.get("ridgeAbsError"))}；
-            Lasso 誤差：{num(item.get("lassoAbsError"))}；
-            Mean baseline 誤差：{num(item.get("meanAbsError"))}
-          </div>
-        </div>
-        """
-    )
+    detail = f"""
+      <div class="detail-box">
+        <strong>AI 假設版回測對照</strong><br>
+        是否酌減：{yes_no(item.get("actualIsReduced"))}；
+        分類預測：{yes_no(item.get("predictedIsReduced"))}；
+        命中：{yes_no(item.get("classificationCorrect"))}<br>
+        實際准許比例：{pct(item.get("actualRemainingRatio"))}；
+        實際酌減率：{pct(item.get("actualReductionRate"))}；
+        區間：{safe(item.get("actualBucket") or "—")}<br>
+        Ridge 誤差：{num(item.get("ridgeAbsError"))}；
+        Lasso 誤差：{num(item.get("lassoAbsError"))}；
+        Mean baseline 誤差：{num(item.get("meanAbsError"))}
+      </div>
+    """
+    parts.append(detail + "</div>")
     render_html("\n".join(parts))
 
 
@@ -572,6 +570,7 @@ def render_features(item: dict[str, Any], contributions: dict[str, Any]) -> None
         </div>
         """
     ]
+
     for row in rows[:12]:
         contribution = row.get("contribution")
         contribution_text = num(contribution)
@@ -589,9 +588,7 @@ def render_features(item: dict[str, Any], contributions: dict[str, Any]) -> None
             """
         )
 
-    st.markdown(
-        "貢獻值來自標準化特徵 × 模型係數，僅解釋目前回測模型方向。",
-    )
+    st.markdown("貢獻值來自標準化特徵 × 模型係數，僅解釋目前回測模型方向。")
     st.caption("正負方向依不同模型目標解讀；請搭配人工查核。")
     render_html(f'<div class="feature-table">{"".join(visible_rows)}</div>')
 
