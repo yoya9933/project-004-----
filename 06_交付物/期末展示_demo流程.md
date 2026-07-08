@@ -1,32 +1,32 @@
 # 期末展示示範流程
 
-本流程使用既有靜態網頁原型展示一件 2025 測試集案件，重點是說明「AI 假設版標註、模型回測、RAG 相似案例」如何串成工程違約金風險評估工具。展示時避免宣稱工具可取代法律判斷。
+本流程使用 Streamlit 版工具展示一件 2025 測試集案件，重點是說明「AI 假設版標註、模型回測、RAG 相似案例」如何串成工程違約金風險評估工具。展示時避免宣稱工具可取代法律判斷。
 
 ## 1. 展示前準備
 
 在專案根目錄執行：
 
 ```powershell
-cd .\06_交付物\risk_assessment_tool
-python -m http.server 8000
+python -m pip install -r requirements.txt
+streamlit run streamlit_app.py
 ```
 
 開啟：
 
 ```text
-http://localhost:8000
+http://localhost:8501
 ```
 
-若 8000 port 已被占用，可改用：
+若 8501 port 已被占用，可改用：
 
 ```powershell
-python -m http.server 8018
+streamlit run streamlit_app.py --server.port 8518
 ```
 
 並開啟：
 
 ```text
-http://localhost:8018
+http://localhost:8518
 ```
 
 ## 2. 建議示範案件
