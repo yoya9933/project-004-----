@@ -696,14 +696,79 @@ def install_style() -> None:
         """
         <style>
           :root {
-            --tool-bg: #eef0ef;
+            --tool-page: #f4f6f5;
+            --tool-sidebar: #ffffff;
             --tool-surface: #ffffff;
             --tool-soft: #f7f8f7;
-            --tool-ink: #202124;
-            --tool-muted: #646760;
+            --tool-ink: #1f2933;
+            --tool-muted: #5c6670;
             --tool-line: #cfd5d1;
             --tool-accent: #176b5d;
             --tool-accent-soft: #d9eee8;
+            --risk-high: #b42318;
+            --risk-low: #147a3f;
+          }
+          html,
+          body,
+          .stApp,
+          [data-testid="stAppViewContainer"],
+          [data-testid="stAppViewContainer"] > .main {
+            background: var(--tool-page) !important;
+            color: var(--tool-ink) !important;
+          }
+          [data-testid="stSidebar"],
+          [data-testid="stSidebar"] > div {
+            background: var(--tool-sidebar) !important;
+            color: var(--tool-ink) !important;
+            border-right: 1px solid var(--tool-line);
+          }
+          [data-testid="stSidebar"] *,
+          [data-testid="stMetric"],
+          [data-testid="stMetric"] * {
+            color: var(--tool-ink) !important;
+          }
+          [data-testid="stMetric"] {
+            background: transparent !important;
+          }
+          .stMarkdown,
+          .stMarkdown p,
+          .stMarkdown li,
+          .stMarkdown div,
+          .stCaption,
+          label,
+          p,
+          h1,
+          h2,
+          h3,
+          h4 {
+            color: var(--tool-ink);
+          }
+          div[data-baseweb="select"] > div,
+          div[data-baseweb="input"] input,
+          textarea {
+            background: #ffffff !important;
+            color: var(--tool-ink) !important;
+            border-color: var(--tool-line) !important;
+          }
+          button[data-baseweb="tab"] {
+            color: var(--tool-muted) !important;
+          }
+          button[data-baseweb="tab"][aria-selected="true"] {
+            color: #c2272d !important;
+          }
+          .stButton button,
+          .stDownloadButton button {
+            border-color: var(--tool-line) !important;
+            background: #ffffff !important;
+            color: var(--tool-ink) !important;
+          }
+          .stButton button[kind="primary"],
+          .stButton button[kind="primary"] *,
+          [data-testid="stSidebar"] .stButton button[kind="primary"],
+          [data-testid="stSidebar"] .stButton button[kind="primary"] * {
+            border-color: var(--tool-accent) !important;
+            background: var(--tool-accent) !important;
+            color: #ffffff !important;
           }
           [data-testid="stToolbar"],
           [data-testid="stDecoration"],
