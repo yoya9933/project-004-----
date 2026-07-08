@@ -619,9 +619,9 @@ def write_summary(
 - RAG 候選索引：`rag_case_index.csv`
 - 相似案例表：`rag_similar_cases.csv`
 - 常見理由語彙摘要：`reason_pattern_summary.csv`
-- AI 提示詞模板：`ai_annotation_prompt_template.md`
+- AI 提示詞模板：`人工智慧輔助標註提示詞模板.md`
 - 每案提示詞封包：`case_prompt_packets.jsonl`
-- 人工查核說明：`human_review_guide.md`
+- 人工查核說明：`人工智慧與檢索增強生成輔助標註人工查核說明.md`
 
 ## 筆數
 
@@ -750,11 +750,11 @@ def main() -> None:
             "example_evidence",
         ],
     )
-    write_prompt_template(args.output_dir / "ai_annotation_prompt_template.md")
-    write_human_review_guide(args.output_dir / "human_review_guide.md")
+    write_prompt_template(args.output_dir / "人工智慧輔助標註提示詞模板.md")
+    write_human_review_guide(args.output_dir / "人工智慧與檢索增強生成輔助標註人工查核說明.md")
     write_prompt_packets(args.output_dir / "case_prompt_packets.jsonl", annotation_rows, similar_rows)
     write_summary(
-        args.output_dir / "ai_rag_annotation_summary.md",
+        args.output_dir / "人工智慧與檢索增強生成輔助標註包摘要.md",
         annotation_rows,
         similar_rows,
         rag_index_rows,

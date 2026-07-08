@@ -1,4 +1,4 @@
-﻿param(
+param(
     [string]$InputCsv,
     [string]$OutputCsv,
     [string]$SummaryDir
@@ -372,7 +372,7 @@ $reducedCount = @($updated | Where-Object { [string]$_.is_reduced -eq "1" }).Cou
 $notReducedCount = @($updated | Where-Object { [string]$_.is_reduced -eq "0" }).Count
 $backupLeaf = if ([string]::IsNullOrWhiteSpace($backupPath)) { "未覆寫原檔，未建立備份" } else { Split-Path -Leaf $backupPath }
 
-$summaryPath = Join-Path $SummaryDir "ai_assumed_review_summary.md"
+$summaryPath = Join-Path $SummaryDir "人工智慧假設版人工審核摘要.md"
 $summary = @(
     "# AI 假設版人工審核摘要",
     "",
