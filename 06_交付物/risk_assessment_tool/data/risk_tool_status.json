@@ -1,9 +1,0 @@
-{
-  "status": "ok",
-  "output": "C:\\Users\\yoya9933\\Desktop\\workspace\\project-004-工程分析\\06_交付物\\risk_assessment_tool\\data\\risk_tool_data.json",
-  "caseCount": 120,
-  "similarCaseCount": 600,
-  "featureContributionCount": 6840,
-  "missingRidgePrediction": 5,
-  "missingReductionProbability": 0
-}

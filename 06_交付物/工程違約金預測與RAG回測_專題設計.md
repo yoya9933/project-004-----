@@ -201,11 +201,11 @@ AI 假設版比例回測已產出於 `06_交付物/reduction_ratio_model/`，另
 
 最後成果可設計成一個輔助評估流程，而不是法院判決預測器。
 
-目前已完成 Streamlit 版工具，並保留原靜態版資料包：
+目前已完成 Streamlit 版工具，舊版靜態 HTML/CSS/JS 資料包已移除：
 
-- 資料打包腳本：`04_執行稿/build_risk_assessment_tool_data.py`。
 - 工具入口：`streamlit_app.py`。
-- 資料位置：`06_交付物/risk_assessment_tool/data/risk_tool_data.json`。
+- 訓練輸入：`06_交付物/ai_rag_annotation/annotation_workbook.csv`。
+- RAG 相似案例輸入：`06_交付物/rag_model_explanation/similar_case_evidence.csv`。
 - 啟動方式：在專案根目錄執行 `streamlit run streamlit_app.py`，再開啟 `http://localhost:8501`。
 - 支援範圍：展示 120 件既有案件，不支援新案件手動輸入。
 - 展示主軸：數值預測展示，並保留模型比較、重要特徵、RAG 相似案例與人工查核提醒。
@@ -213,15 +213,13 @@ AI 假設版比例回測已產出於 `06_交付物/reduction_ratio_model/`，另
 輸入：
 
 - 既有 120 件案件的案號、案名、法院與年度。
-- 既有模型輸出：酌減機率、預測准許比例、預測酌減率、酌減區間。
+- Streamlit 現場訓練輸出：酌減機率、預測准許比例、預測酌減率。
 - 既有解釋資料：重要特徵貢獻、RAG 相似案例與人工查核提醒。
 
 輸出：
 
-- 風險等級：高、中、低。
 - 酌減機率：Logistic Regression 數值。
 - 預測准許比例與預測酌減率：Ridge Regression 數值。
-- 酌減區間：未酌減、小幅酌減、中度酌減、大幅酌減或全免/近乎全免。
 - baseline 比較：Ridge、Lasso 與 mean baseline 的准許比例。
 - 重要影響特徵：分類模型與比例模型的主要特徵貢獻。
 - 相似判決案例：每案前 5 件 RAG 相似案例。

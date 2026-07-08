@@ -199,7 +199,7 @@ TPHV,113,建上,46,20250610,1
 
 若網頁現場無法開啟，可以直接打開以下資料輔助展示：
 
-- `06_交付物/risk_assessment_tool/data/risk_tool_data.json`
+- `06_交付物/ai_rag_annotation/annotation_workbook.csv`
 - `06_交付物/rag_model_explanation/case_explanation_summary.csv`
 - `06_交付物/rag_model_explanation/similar_case_evidence.csv`
 - `06_交付物/rag_model_explanation/model_feature_contributions.csv`

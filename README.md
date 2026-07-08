@@ -57,4 +57,4 @@ python .\04_執行稿\validate_streamlit_app.py
 
 目前資料為 AI 假設版標註與回測展示，不是法律意見；正式結論須回到原判決全文人工查核。
 
-原靜態 HTML/CSS/JS 檔案仍保留於 `06_交付物/risk_assessment_tool/`，作為舊版展示與資料包結構參考。
+舊版靜態 HTML/CSS/JS 工具已移除；目前展示入口統一使用根目錄 `streamlit_app.py`。
