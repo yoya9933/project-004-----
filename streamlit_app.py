@@ -10,7 +10,7 @@ import re
 from collections import Counter, defaultdict
 from pathlib import Path
 from textwrap import dedent
-from typing import Any
+from typing import Any, TypeGuard
 
 import pandas as pd
 import streamlit as st
@@ -93,7 +93,7 @@ FEATURE_LABELS = {
 }
 
 
-def is_number(value: Any) -> bool:
+def is_number(value: Any) -> TypeGuard[int | float]:
     return isinstance(value, (int, float)) and not isinstance(value, bool) and math.isfinite(float(value))
 
 
@@ -555,7 +555,11 @@ def contribution_rows(
 ) -> dict[str, list[dict[str, Any]]]:
     scaler: StandardScaler = pipeline.named_steps["scale"]
     estimator = pipeline.named_steps["model"]
-    coef_values = estimator.coef_[0] if getattr(estimator, "coef_", []).ndim == 2 else estimator.coef_
+    coef_values: Any = getattr(estimator, "coef_", None)
+    if coef_values is None:
+        raise ValueError(f"模型 {model_name} 不含 coef_，無法計算特徵貢獻")
+    if getattr(coef_values, "ndim", 1) == 2:
+        coef_values = coef_values[0]
     grouped: dict[str, list[dict[str, Any]]] = {}
     for _, row in frame.iterrows():
         values = row[FEATURE_NAMES].astype(float).to_numpy()
@@ -1120,12 +1124,17 @@ def render_sidebar(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[
         if filtered:
             jids = [str(item.get("jid")) for item in filtered]
             if st.session_state.get("selected_jid") not in jids:
-                st.session_state.selected_jid = preferred_jid(filtered)
+                st.session_state.selected_jid = preferred_jid(filtered) or jids[0]
+
+            def format_case_label(jid: Any) -> str:
+                jid_text = str(jid)
+                return labels.get(jid_text, jid_text)
+
             selected_jid = st.selectbox(
                 "案件",
                 jids,
                 key="selected_jid",
-                format_func=lambda jid: labels.get(jid, jid),
+                format_func=format_case_label,
             )
         else:
             st.warning("沒有符合條件的案件")
@@ -1412,4 +1421,4 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 
-#http://localhost:8522
+#http://localhost:8522 | python -m streamlit run streamlit_app.py
