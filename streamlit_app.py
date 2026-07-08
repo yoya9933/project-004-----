@@ -33,6 +33,7 @@ CONTRIBUTION_MODELS = {
     "ridge_regression_l2": "比例 Ridge",
     "lasso_regression_l1": "比例 Lasso",
 }
+HIDDEN_FEATURE_LABELS = {"每日違約金"}
 
 
 def is_number(value: Any) -> bool:
@@ -79,6 +80,24 @@ def clamp_ratio(value: Any) -> float:
     if not is_number(value):
         return 0.0
     return max(0.0, min(1.0, float(value)))
+
+
+def is_hidden_feature(row: dict[str, Any]) -> bool:
+    return str(row.get("label") or "").strip() in HIDDEN_FEATURE_LABELS
+
+
+def visible_feature_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [row for row in rows if not is_hidden_feature(row)]
+
+
+def remove_hidden_feature_terms(value: Any) -> str:
+    parts = [part.strip() for part in str(value or "").split("；") if part.strip()]
+    visible_parts = [
+        part
+        for part in parts
+        if not any(part.startswith(hidden_label) for hidden_label in HIDDEN_FEATURE_LABELS)
+    ]
+    return "；".join(visible_parts) or "—"
 
 
 @st.cache_data(show_spinner=False)
@@ -537,10 +556,10 @@ def render_feature_summary(item: dict[str, Any]) -> None:
         f"""
         <div class="panel">
           <h3>模型方向摘要</h3>
-          <p class="muted"><strong>提高酌減機率：</strong>{safe(item.get("topClassificationTowardReduction") or "—")}</p>
-          <p class="muted"><strong>降低酌減機率：</strong>{safe(item.get("topClassificationTowardNoReduction") or "—")}</p>
-          <p class="muted"><strong>Ridge 較少酌減：</strong>{safe(item.get("topRatioTowardLessReductionRidge") or "—")}</p>
-          <p class="muted"><strong>Ridge 較多酌減：</strong>{safe(item.get("topRatioTowardMoreReductionRidge") or "—")}</p>
+          <p class="muted"><strong>提高酌減機率：</strong>{safe(remove_hidden_feature_terms(item.get("topClassificationTowardReduction")))}</p>
+          <p class="muted"><strong>降低酌減機率：</strong>{safe(remove_hidden_feature_terms(item.get("topClassificationTowardNoReduction")))}</p>
+          <p class="muted"><strong>Ridge 較少酌減：</strong>{safe(remove_hidden_feature_terms(item.get("topRatioTowardLessReductionRidge")))}</p>
+          <p class="muted"><strong>Ridge 較多酌減：</strong>{safe(remove_hidden_feature_terms(item.get("topRatioTowardMoreReductionRidge")))}</p>
         </div>
         """
     )
@@ -555,7 +574,7 @@ def render_features(item: dict[str, Any], contributions: dict[str, Any]) -> None
         format_func=lambda value: CONTRIBUTION_MODELS[value],
         horizontal=True,
     )
-    rows = contributions.get(str(item.get("jid")), {}).get(model, [])
+    rows = visible_feature_rows(contributions.get(str(item.get("jid")), {}).get(model, []))
     if not rows:
         st.info("這個模型沒有可顯示的特徵貢獻。")
         return
