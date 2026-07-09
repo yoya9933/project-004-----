@@ -1628,4 +1628,4 @@ def main() -> None:
 if __name__ == "__main__":
     main()
 
-#http://localhost:8522 | python -m streamlit run streamlit_app.py
+#http://localhost:8522 | streamlit run streamlit_app.py
