@@ -17,6 +17,7 @@
     "missingSimilar": 0,
     "missingContributionModels": 0,
     "caseLabelIncludesJid": true,
+    "hitFilterOk": true,
     "featureAnalysisOk": true,
     "featureAnalysisRows": 120,
     "featureAnalysisReductionRateRows": 115,

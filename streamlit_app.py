@@ -52,6 +52,10 @@ SPLIT_LABELS = {
     "test_2025": "測試集 2025",
     "latest_2026": "最新年度 2026",
 }
+HIT_FILTER_ALL = "全部"
+HIT_FILTER_CORRECT = "命中"
+HIT_FILTER_WRONG = "未命中"
+HIT_FILTER_OPTIONS = [HIT_FILTER_ALL, HIT_FILTER_CORRECT, HIT_FILTER_WRONG]
 CONTRIBUTION_MODELS = {
     "logistic_regression_l2": "分類 Logistic",
     "ridge_regression_l2": "比例 Ridge",
@@ -205,7 +209,7 @@ def to_int_or_none(value: Any) -> int | None:
 
 
 def parse_label(value: Any) -> int | None:
-    text = str(value or "").strip().lower()
+    text = "" if value is None else str(value).strip().lower()
     if not text:
         return None
     if text in {"1", "true", "t", "yes", "y", "是", "有", "酌減", "已酌減"}:
@@ -1135,6 +1139,7 @@ def ensure_session_defaults() -> None:
         "search_query": "",
         "year_filter": "全部年度",
         "split_filter": "全部切分",
+        "hit_filter": HIT_FILTER_ALL,
         "contribution_model": "logistic_regression_l2",
     }
     for key, value in defaults.items():
@@ -1145,6 +1150,7 @@ def apply_preset(name: str) -> None:
     st.session_state.search_query = ""
     st.session_state.year_filter = "全部年度"
     st.session_state.split_filter = "全部切分"
+    st.session_state.hit_filter = HIT_FILTER_ALL
     if name == "test2025":
         st.session_state.year_filter = "2025"
         st.session_state.split_filter = "test_2025"
@@ -1159,10 +1165,20 @@ def split_label(value: str) -> str:
     return SPLIT_LABELS.get(value, value)
 
 
+def matches_hit_filter(item: dict[str, Any], hit_filter: str) -> bool:
+    correct = parse_label(item.get("classificationCorrect"))
+    if hit_filter == HIT_FILTER_CORRECT:
+        return correct == 1
+    if hit_filter == HIT_FILTER_WRONG:
+        return correct == 0
+    return True
+
+
 def filter_cases(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
     keyword = str(st.session_state.search_query).strip().lower()
     year = "" if st.session_state.year_filter == "全部年度" else st.session_state.year_filter
     split = "" if st.session_state.split_filter == "全部切分" else st.session_state.split_filter
+    hit_filter = str(st.session_state.hit_filter)
 
     rows: list[dict[str, Any]] = []
     for item in cases:
@@ -1172,6 +1188,8 @@ def filter_cases(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if year and str(item.get("year")) != year:
             continue
         if split and item.get("split") != split:
+            continue
+        if not matches_hit_filter(item, hit_filter):
             continue
         rows.append(item)
 
@@ -1277,6 +1295,7 @@ def render_sidebar(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[
         st.text_input("搜尋", placeholder="案號、案名、法院", key="search_query")
         st.selectbox("年度", ["全部年度", *years], key="year_filter")
         st.selectbox("切分", ["全部切分", *splits], key="split_filter", format_func=split_label)
+        st.selectbox("分類命中", HIT_FILTER_OPTIONS, key="hit_filter")
 
         st.markdown(f"**符合條件：{len(filtered)} 件**")
         if not filtered:

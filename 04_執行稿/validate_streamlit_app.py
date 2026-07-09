@@ -142,6 +142,7 @@ def validate() -> dict[str, Any]:
     live_feature_contribution_count = 0
     missing_models = 0
     case_label_includes_jid = False
+    hit_filter_ok = False
     app_module: Any = None
     if APP_PATH.exists() and streamlit_available and pandas_available and sklearn_available:
         try:
@@ -164,12 +165,36 @@ def validate() -> dict[str, Any]:
                 str(item.get("jid", "")) in str(label_map.get(str(item.get("jid", "")), ""))
                 for item in live_result["cases"]
             )
+            correct_rows = [
+                item
+                for item in live_result["cases"]
+                if app_module.matches_hit_filter(item, app_module.HIT_FILTER_CORRECT)
+            ]
+            wrong_rows = [
+                item
+                for item in live_result["cases"]
+                if app_module.matches_hit_filter(item, app_module.HIT_FILTER_WRONG)
+            ]
+            all_rows = [
+                item
+                for item in live_result["cases"]
+                if app_module.matches_hit_filter(item, app_module.HIT_FILTER_ALL)
+            ]
+            hit_filter_ok = (
+                bool(correct_rows)
+                and bool(wrong_rows)
+                and len(all_rows) == len(live_result["cases"])
+                and all(app_module.parse_label(item.get("classificationCorrect")) == 1 for item in correct_rows)
+                and all(app_module.parse_label(item.get("classificationCorrect")) == 0 for item in wrong_rows)
+                and 'key="hit_filter"' in source
+            )
             live_training_ok = live_training_case_count == 120 and live_training_ratio_count >= 100
         except Exception as exc:  # noqa: BLE001
             failures.append(f"live training failed: {exc}")
     require(live_training_ok, "live training did not produce expected case predictions", failures)
     require(missing_models == 0, f"Cases missing live contribution models: {missing_models}", failures)
     require(case_label_includes_jid, "Case select labels must include JID to distinguish duplicate titles", failures)
+    require(hit_filter_ok, "Classification hit sidebar filter is missing or does not filter correctly", failures)
 
     feature_analysis_ok = False
     feature_analysis_rows = 0
@@ -224,6 +249,7 @@ def validate() -> dict[str, Any]:
             "missingSimilar": missing_similar,
             "missingContributionModels": missing_models,
             "caseLabelIncludesJid": case_label_includes_jid,
+            "hitFilterOk": hit_filter_ok,
             "featureAnalysisOk": feature_analysis_ok,
             "featureAnalysisRows": feature_analysis_rows,
             "featureAnalysisReductionRateRows": feature_analysis_reduction_rate_rows,
