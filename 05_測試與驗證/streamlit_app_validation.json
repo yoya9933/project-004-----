@@ -15,6 +15,14 @@
     "similarCaseCount": 600,
     "featureContributionCount": 2880,
     "missingSimilar": 0,
-    "missingContributionModels": 0
+    "missingContributionModels": 0,
+    "featureAnalysisOk": true,
+    "featureAnalysisRows": 120,
+    "featureAnalysisReductionRateRows": 115,
+    "featureMatrixShape": [
+      6,
+      6
+    ],
+    "constantFeatureIsNan": true
   }
 }

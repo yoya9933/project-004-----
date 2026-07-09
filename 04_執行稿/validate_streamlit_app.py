@@ -14,6 +14,7 @@ README_PATH = PROJECT_ROOT / "README.md"
 REQUIREMENTS_PATH = PROJECT_ROOT / "requirements.txt"
 ANNOTATION_PATH = PROJECT_ROOT / "06_交付物" / "ai_rag_annotation" / "annotation_workbook.csv"
 SIMILAR_CASES_PATH = PROJECT_ROOT / "06_交付物" / "rag_model_explanation" / "similar_case_evidence.csv"
+FEATURE_ANALYSIS_PATH = PROJECT_ROOT / "06_交付物" / "120_判決主要特徵值總表.csv"
 OUTPUT_DIR = PROJECT_ROOT / "05_測試與驗證"
 
 
@@ -39,6 +40,11 @@ def validate() -> dict[str, Any]:
     require(REQUIREMENTS_PATH.exists(), f"Missing requirements file: {REQUIREMENTS_PATH}", failures)
     require(ANNOTATION_PATH.exists(), f"Missing annotation workbook: {ANNOTATION_PATH}", failures)
     require(SIMILAR_CASES_PATH.exists(), f"Missing similar case evidence: {SIMILAR_CASES_PATH}", failures)
+    require(
+        FEATURE_ANALYSIS_PATH.exists(),
+        f"Missing feature analysis CSV: {FEATURE_ANALYSIS_PATH}",
+        failures,
+    )
 
     compile_ok = False
     if APP_PATH.exists():
@@ -71,6 +77,11 @@ def validate() -> dict[str, Any]:
         "render_sidebar",
         "案件儀表板",
         "資料總覽",
+        "FEATURE_ANALYSIS_PATH",
+        "prepare_feature_correlation_frame",
+        "compute_feature_correlation",
+        "render_feature_correlation",
+        "特徵相關性",
         "限制說明",
         "RAG 相似案例",
         "重要特徵",
@@ -130,6 +141,7 @@ def validate() -> dict[str, Any]:
     live_training_ratio_count = 0
     live_feature_contribution_count = 0
     missing_models = 0
+    app_module: Any = None
     if APP_PATH.exists() and streamlit_available and pandas_available and sklearn_available:
         try:
             spec = importlib.util.spec_from_file_location("streamlit_app_validation_target", APP_PATH)
@@ -152,6 +164,40 @@ def validate() -> dict[str, Any]:
     require(live_training_ok, "live training did not produce expected case predictions", failures)
     require(missing_models == 0, f"Cases missing live contribution models: {missing_models}", failures)
 
+    feature_analysis_ok = False
+    feature_analysis_rows = 0
+    feature_analysis_reduction_rate_rows = 0
+    feature_matrix_shape: list[int] = []
+    constant_feature_is_nan = False
+    if FEATURE_ANALYSIS_PATH.exists() and app_module is not None:
+        try:
+            correlation_rows = load_csv(FEATURE_ANALYSIS_PATH)
+            correlation_frame = app_module.prepare_feature_correlation_frame(
+                correlation_rows
+            )
+            correlation_result = app_module.compute_feature_correlation(
+                correlation_frame
+            )
+            feature_analysis_rows = len(correlation_frame)
+            feature_analysis_reduction_rate_rows = int(
+                correlation_frame["酌減率"].notna().sum()
+            )
+            feature_matrix_shape = list(correlation_result["matrix"].shape)
+            constant_value = correlation_result["matrix"].loc[
+                "部分完成／部分驗收", "業主可歸責"
+            ]
+            constant_feature_is_nan = bool(app_module.pd.isna(constant_value))
+            feature_analysis_ok = (
+                feature_analysis_rows == 120
+                and feature_matrix_shape == [6, 6]
+                and len(correlation_result["is_reduced"]) == 6
+                and len(correlation_result["reduction_rate"]) == 6
+                and constant_feature_is_nan
+            )
+        except Exception as exc:  # noqa: BLE001
+            failures.append(f"feature correlation validation failed: {exc}")
+    require(feature_analysis_ok, "feature correlation analysis validation failed", failures)
+
     return {
         "status": "ok" if not failures else "failed",
         "failures": failures,
@@ -170,6 +216,11 @@ def validate() -> dict[str, Any]:
             "featureContributionCount": live_feature_contribution_count,
             "missingSimilar": missing_similar,
             "missingContributionModels": missing_models,
+            "featureAnalysisOk": feature_analysis_ok,
+            "featureAnalysisRows": feature_analysis_rows,
+            "featureAnalysisReductionRateRows": feature_analysis_reduction_rate_rows,
+            "featureMatrixShape": feature_matrix_shape,
+            "constantFeatureIsNan": constant_feature_is_nan,
         },
     }
 

@@ -22,6 +22,23 @@ from sklearn.preprocessing import StandardScaler
 PROJECT_ROOT = Path(__file__).resolve().parent
 ANNOTATION_PATH = PROJECT_ROOT / "06_交付物" / "ai_rag_annotation" / "annotation_workbook.csv"
 SIMILAR_CASES_PATH = PROJECT_ROOT / "06_交付物" / "rag_model_explanation" / "similar_case_evidence.csv"
+FEATURE_ANALYSIS_PATH = PROJECT_ROOT / "06_交付物" / "120_判決主要特徵值總表.csv"
+
+FORMAL_FEATURE_COLUMNS = {
+    "正式特徵_業主可歸責": "業主可歸責",
+    "正式特徵_承包商可歸責": "承包商可歸責",
+    "正式特徵_展延免計工期爭議": "展延／免計工期爭議",
+    "正式特徵_實際損害不明偏低": "實際損害不明／偏低",
+    "正式特徵_部分完成部分驗收": "部分完成／部分驗收",
+    "正式特徵_業主已使用受益": "業主已使用／受益",
+}
+FEATURE_ANALYSIS_REQUIRED_COLUMNS = [
+    *FORMAL_FEATURE_COLUMNS,
+    "是否酌減",
+    "酌減率",
+    "主張違約金",
+    "法院准許違約金",
+]
 
 SPLIT_ORDER = {
     "train_2021_2023": 1,
@@ -199,6 +216,120 @@ def parse_label(value: Any) -> int | None:
     if number is None:
         return None
     return int(number != 0)
+
+
+def prepare_feature_correlation_frame(
+    rows: list[dict[str, str]],
+) -> pd.DataFrame:
+    if not rows:
+        raise ValueError("正式特徵資料沒有任何案件")
+    missing = [
+        name for name in FEATURE_ANALYSIS_REQUIRED_COLUMNS if name not in rows[0]
+    ]
+    if missing:
+        raise ValueError(f"正式特徵資料缺少必要欄位：{', '.join(missing)}")
+
+    records: list[dict[str, float | None]] = []
+    for row in rows:
+        record = {
+            label: (
+                float(parsed)
+                if (parsed := parse_label(row.get(source))) is not None
+                else None
+            )
+            for source, label in FORMAL_FEATURE_COLUMNS.items()
+        }
+        is_reduced = parse_label(row.get("是否酌減"))
+        record["是否酌減"] = float(is_reduced) if is_reduced is not None else None
+
+        claimed = to_float_or_none(row.get("主張違約金"))
+        allowed = to_float_or_none(row.get("法院准許違約金"))
+        reduction_rate = to_float_or_none(row.get("酌減率"))
+        valid_amounts = (
+            claimed is not None
+            and claimed > 0
+            and allowed is not None
+            and 0 <= allowed <= claimed
+        )
+        record["酌減率"] = (
+            reduction_rate
+            if valid_amounts
+            and reduction_rate is not None
+            and 0 <= reduction_rate <= 1
+            else None
+        )
+        records.append(record)
+
+    return pd.DataFrame(records, dtype="float64")
+
+
+def correlation_status(value: Any) -> str:
+    if not is_number(value):
+        return "無變異，無法計算"
+    magnitude = abs(float(value))
+    if magnitude >= 0.7:
+        strength = "強"
+    elif magnitude >= 0.4:
+        strength = "中"
+    elif magnitude >= 0.2:
+        strength = "弱"
+    else:
+        strength = "極弱"
+    direction = (
+        "正相關"
+        if float(value) > 0
+        else "負相關"
+        if float(value) < 0
+        else "無線性相關"
+    )
+    return f"{strength}{direction}"
+
+
+def target_correlation_table(
+    frame: pd.DataFrame,
+    target: str,
+) -> pd.DataFrame:
+    rows: list[dict[str, Any]] = []
+    for feature in FORMAL_FEATURE_COLUMNS.values():
+        pair = frame[[feature, target]].dropna()
+        can_compute = (
+            len(pair) >= 2
+            and pair[feature].nunique() >= 2
+            and pair[target].nunique() >= 2
+        )
+        correlation = (
+            float(pair[feature].corr(pair[target])) if can_compute else math.nan
+        )
+        rows.append(
+            {
+                "特徵": feature,
+                "相關係數": correlation,
+                "有效樣本": len(pair),
+                "判讀": correlation_status(correlation),
+            }
+        )
+    return pd.DataFrame(rows)
+
+
+def compute_feature_correlation(frame: pd.DataFrame) -> dict[str, pd.DataFrame]:
+    features = list(FORMAL_FEATURE_COLUMNS.values())
+    counts = pd.DataFrame(
+        [
+            {
+                "特徵": feature,
+                "0 件數": int((frame[feature] == 0).sum()),
+                "1 件數": int((frame[feature] == 1).sum()),
+                "缺值": int(frame[feature].isna().sum()),
+            }
+            for feature in features
+        ]
+    )
+    return {
+        "counts": counts,
+        "matrix": frame[features].corr(method="pearson"),
+        "is_reduced": target_correlation_table(frame, "是否酌減"),
+        "reduction_rate": target_correlation_table(frame, "酌減率"),
+    }
 
 
 def flag(value: Any) -> int:
@@ -1340,6 +1471,93 @@ def render_overview(payload: dict[str, Any], filtered: list[dict[str, Any]]) -> 
         st.json({SPLIT_LABELS.get(k, k): v for k, v in split_counts.items()}, expanded=False)
 
 
+def correlation_cell_style(value: Any) -> str:
+    if not is_number(value):
+        return "background-color: #f1f5f4; color: #64748b;"
+    bounded = max(-1.0, min(1.0, float(value)))
+    intensity = abs(bounded)
+    if bounded >= 0:
+        red = 220
+        green = 252 - round(60 * intensity)
+        blue = 231 - round(45 * intensity)
+    else:
+        red = 219 - round(35 * intensity)
+        green = 234 - round(45 * intensity)
+        blue = 254
+    return f"background-color: rgb({red}, {green}, {blue}); color: #17201d;"
+
+
+def format_correlation_value(value: Any) -> str:
+    return f"{float(value):.3f}" if is_number(value) else "—"
+
+
+def render_target_correlation(title: str, table: pd.DataFrame) -> None:
+    st.markdown(f"### {title}")
+    display = table.copy()
+    display["相關係數"] = display["相關係數"].map(format_correlation_value)
+    st.dataframe(display, use_container_width=True, hide_index=True)
+
+    chart = table.dropna(subset=["相關係數"])[["特徵", "相關係數"]]
+    if chart.empty:
+        st.info("所有特徵皆因無變異或有效樣本不足而無法繪圖。")
+    else:
+        st.bar_chart(
+            chart,
+            x="特徵",
+            y="相關係數",
+            horizontal=True,
+            use_container_width=True,
+        )
+
+
+def render_feature_correlation() -> None:
+    st.subheader("六項正式特徵相關性")
+    st.caption(
+        "二元特徵間的 Pearson 相關等同 Phi coefficient；"
+        "二元特徵與酌減率的 Pearson 相關等同 point-biserial correlation。"
+    )
+    try:
+        rows = read_csv_rows(FEATURE_ANALYSIS_PATH)
+        frame = prepare_feature_correlation_frame(rows)
+        result = compute_feature_correlation(frame)
+    except (FileNotFoundError, ValueError) as exc:
+        st.warning(f"無法建立相關性分析：{exc}")
+        return
+
+    valid_is_reduced = int(frame["是否酌減"].notna().sum())
+    valid_reduction_rate = int(frame["酌減率"].notna().sum())
+    col1, col2, col3 = st.columns(3)
+    col1.metric("案件數", len(frame))
+    col2.metric("是否酌減有效樣本", valid_is_reduced)
+    col3.metric("酌減率有效樣本", valid_reduction_rate)
+
+    st.markdown("### 特徵分布")
+    st.dataframe(result["counts"], use_container_width=True, hide_index=True)
+
+    st.markdown("### 六項特徵相關矩陣")
+    matrix_style = (
+        result["matrix"]
+        .style.map(correlation_cell_style)
+        .format(format_correlation_value)
+    )
+    st.dataframe(matrix_style, use_container_width=True)
+    st.caption(
+        "「部分完成／部分驗收」在目前 120 件中皆為 1，"
+        "因此相關係數顯示為「—」，不是零相關。"
+    )
+
+    left, right = st.columns(2)
+    with left:
+        render_target_correlation("與是否酌減的相關性", result["is_reduced"])
+    with right:
+        render_target_correlation("與酌減率的相關性", result["reduction_rate"])
+
+    st.info(
+        "相關係數只表示線性共同變動，不代表法律因果；"
+        "目前資料仍包含 AI 假設標註，正式結論需回到判決全文查核。"
+    )
+
+
 def render_notice(payload: dict[str, Any]) -> None:
     metadata = payload["metadata"]
     render_html(
@@ -1381,7 +1599,9 @@ def main() -> None:
     render_header(selected)
     render_metrics(selected)
 
-    tab_case, tab_data, tab_limits = st.tabs(["案件儀表板", "資料總覽", "限制說明"])
+    tab_case, tab_data, tab_correlation, tab_limits = st.tabs(
+        ["案件儀表板", "資料總覽", "特徵相關性", "限制說明"]
+    )
     with tab_case:
         if is_case_trained(selected):
             left, right = st.columns([0.95, 1.05])
@@ -1409,6 +1629,9 @@ def main() -> None:
             for item in filtered
         ]
         st.dataframe(rows, use_container_width=True, hide_index=True)
+
+    with tab_correlation:
+        render_feature_correlation()
 
     with tab_limits:
         render_notice(payload)
