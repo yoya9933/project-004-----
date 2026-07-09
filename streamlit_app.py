@@ -1332,23 +1332,7 @@ def render_untrained_model_notice() -> None:
 
 
 def render_model_compare(item: dict[str, Any]) -> None:
-    rows = [
-        ("Mean baseline", item.get("meanPredictedRemainingRatio")),
-        ("Ridge", item.get("ridgePredictedRemainingRatio")),
-        ("Lasso", item.get("lassoPredictedRemainingRatio")),
-    ]
     parts = ['<div class="panel"><h3>模型比較</h3>']
-    for label, ratio in rows:
-        width = max(2.0, clamp_ratio(ratio) * 100) if is_number(ratio) else 0.0
-        parts.append(
-            f"""
-            <div class="bar-row">
-              <span class="bar-label">{safe(label)}</span>
-              <span class="bar-track"><span class="bar-fill" style="width:{width:.1f}%"></span></span>
-              <span>{pct(ratio)}</span>
-            </div>
-            """
-        )
     detail = f"""
       <div class="detail-box">
         <strong>AI 假設版回測對照</strong><br>
