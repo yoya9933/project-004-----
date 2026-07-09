@@ -9,22 +9,23 @@
     "pandasInstalled": true,
     "sklearnInstalled": true,
     "liveTrainingOk": true,
-    "liveTrainingCaseCount": 120,
-    "liveTrainingUsableRatioRows": 115,
-    "caseCount": 120,
-    "similarCaseCount": 600,
-    "featureContributionCount": 2880,
+    "liveTrainingCaseCount": 824,
+    "liveTrainingUsableRatioRows": 765,
+    "caseCount": 824,
+    "similarCaseCount": 4120,
+    "featureContributionCount": 19776,
     "missingSimilar": 0,
     "missingContributionModels": 0,
     "caseLabelIncludesJid": true,
     "hitFilterOk": true,
+    "ratioModelSelectorOk": true,
     "featureAnalysisOk": true,
-    "featureAnalysisRows": 120,
-    "featureAnalysisReductionRateRows": 115,
+    "featureAnalysisRows": 824,
+    "featureAnalysisReductionRateRows": 765,
     "featureMatrixShape": [
       6,
       6
     ],
-    "constantFeatureIsNan": true
+    "finiteFeatureCorrelations": 36
   }
 }

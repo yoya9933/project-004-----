@@ -20,9 +20,18 @@ from sklearn.preprocessing import StandardScaler
 
 
 PROJECT_ROOT = Path(__file__).resolve().parent
-ANNOTATION_PATH = PROJECT_ROOT / "06_交付物" / "ai_rag_annotation" / "annotation_workbook.csv"
-SIMILAR_CASES_PATH = PROJECT_ROOT / "06_交付物" / "rag_model_explanation" / "similar_case_evidence.csv"
-FEATURE_ANALYSIS_PATH = PROJECT_ROOT / "06_交付物" / "120_判決主要特徵值總表.csv"
+ANNOTATION_PATH = (
+    PROJECT_ROOT
+    / "06_交付物"
+    / "ai_rag_annotation_expanded_824"
+    / "annotation_workbook_ai_assumed.csv"
+)
+SIMILAR_CASES_PATH = (
+    PROJECT_ROOT
+    / "06_交付物"
+    / "ai_rag_annotation_expanded_824"
+    / "rag_similar_cases.csv"
+)
 
 FORMAL_FEATURE_COLUMNS = {
     "正式特徵_業主可歸責": "業主可歸責",
@@ -31,6 +40,14 @@ FORMAL_FEATURE_COLUMNS = {
     "正式特徵_實際損害不明偏低": "實際損害不明／偏低",
     "正式特徵_部分完成部分驗收": "部分完成／部分驗收",
     "正式特徵_業主已使用受益": "業主已使用／受益",
+}
+ANNOTATION_FEATURE_COLUMNS = {
+    "issue_owner_fault": "業主可歸責",
+    "issue_contractor_fault": "承包商可歸責",
+    "issue_extension_request": "展延／免計工期爭議",
+    "issue_actual_damage_unclear": "實際損害不明／偏低",
+    "issue_partial_completion": "部分完成／部分驗收",
+    "issue_used_by_owner": "業主已使用／受益",
 }
 FEATURE_ANALYSIS_REQUIRED_COLUMNS = [
     *FORMAL_FEATURE_COLUMNS,
@@ -60,6 +77,26 @@ CONTRIBUTION_MODELS = {
     "logistic_regression_l2": "分類 Logistic",
     "ridge_regression_l2": "比例 Ridge",
     "lasso_regression_l1": "比例 Lasso",
+}
+RATIO_MODEL_OPTIONS = {
+    "ridge_regression_l2": {
+        "label": "Ridge",
+        "remainingField": "ridgePredictedRemainingRatio",
+        "errorField": "ridgeAbsError",
+        "contributionModel": "ridge_regression_l2",
+    },
+    "lasso_regression_l1": {
+        "label": "Lasso",
+        "remainingField": "lassoPredictedRemainingRatio",
+        "errorField": "lassoAbsError",
+        "contributionModel": "lasso_regression_l1",
+    },
+    "mean_baseline": {
+        "label": "Mean baseline",
+        "remainingField": "meanPredictedRemainingRatio",
+        "errorField": "meanAbsError",
+        "contributionModel": "",
+    },
 }
 HIDDEN_FEATURE_LABELS = {"每日違約金"}
 FEATURE_NAMES = [
@@ -136,6 +173,40 @@ def yes_no(value: Any) -> str:
     if value == 0:
         return "否"
     return "—"
+
+
+def ratio_model_key(value: Any = None) -> str:
+    key = str(value or st.session_state.get("ratio_model") or "ridge_regression_l2")
+    return key if key in RATIO_MODEL_OPTIONS else "ridge_regression_l2"
+
+
+def ratio_model_label(value: Any) -> str:
+    key = ratio_model_key(value)
+    return str(RATIO_MODEL_OPTIONS[key]["label"])
+
+
+def ratio_model_remaining_ratio(item: dict[str, Any], model_key: Any = None) -> float | None:
+    key = ratio_model_key(model_key)
+    field = str(RATIO_MODEL_OPTIONS[key]["remainingField"])
+    value = item.get(field)
+    return float(value) if is_number(value) else None
+
+
+def ratio_model_reduction_rate(item: dict[str, Any], model_key: Any = None) -> float | None:
+    remaining = ratio_model_remaining_ratio(item, model_key)
+    return 1.0 - remaining if remaining is not None else None
+
+
+def ratio_model_abs_error(item: dict[str, Any], model_key: Any = None) -> float | None:
+    key = ratio_model_key(model_key)
+    field = str(RATIO_MODEL_OPTIONS[key]["errorField"])
+    value = item.get(field)
+    return float(value) if is_number(value) else None
+
+
+def ratio_model_contribution_model(model_key: Any = None) -> str:
+    key = ratio_model_key(model_key)
+    return str(RATIO_MODEL_OPTIONS[key]["contributionModel"])
 
 
 def safe(value: Any) -> str:
@@ -249,6 +320,51 @@ def prepare_feature_correlation_frame(
         claimed = to_float_or_none(row.get("主張違約金"))
         allowed = to_float_or_none(row.get("法院准許違約金"))
         reduction_rate = to_float_or_none(row.get("酌減率"))
+        valid_amounts = (
+            claimed is not None
+            and claimed > 0
+            and allowed is not None
+            and 0 <= allowed <= claimed
+        )
+        record["酌減率"] = (
+            reduction_rate
+            if valid_amounts
+            and reduction_rate is not None
+            and 0 <= reduction_rate <= 1
+            else None
+        )
+        records.append(record)
+
+    return pd.DataFrame(records, dtype="float64")
+
+
+def prepare_annotation_feature_correlation_frame(
+    rows: list[dict[str, str]],
+) -> pd.DataFrame:
+    if not rows:
+        raise ValueError("AI 假設標註資料沒有任何案件")
+    missing = [
+        name for name in [*ANNOTATION_FEATURE_COLUMNS, "is_reduced"] if name not in rows[0]
+    ]
+    if missing:
+        raise ValueError(f"AI 假設標註資料缺少必要欄位：{', '.join(missing)}")
+
+    records: list[dict[str, float | None]] = []
+    for row in rows:
+        record = {
+            label: (
+                float(parsed)
+                if (parsed := parse_label(row.get(source))) is not None
+                else None
+            )
+            for source, label in ANNOTATION_FEATURE_COLUMNS.items()
+        }
+        is_reduced = parse_label(row.get("is_reduced"))
+        record["是否酌減"] = float(is_reduced) if is_reduced is not None else None
+
+        claimed = to_float_or_none(row.get("claimed_penalty"))
+        allowed = to_float_or_none(row.get("allowed_penalty"))
+        _, reduction_rate = actual_ratios(row)
         valid_amounts = (
             claimed is not None
             and claimed > 0
@@ -542,7 +658,7 @@ def load_base_payload() -> dict[str, Any]:
                 "中": "酌減機率 >= 45% 或預測酌減率 >= 25%",
                 "低": "未達高/中門檻",
             },
-            "notice": "資料來自 annotation_workbook.csv；模型數字需按「現場訓練模型」後才會由 Streamlit 重新訓練產生。",
+            "notice": "資料來自 annotation_workbook_ai_assumed.csv；模型數字需按「現場訓練模型」後才會由 Streamlit 重新訓練產生。",
         },
         "cases": cases,
         "similarCasesByJid": dict(similar_by_jid),
@@ -1140,6 +1256,7 @@ def ensure_session_defaults() -> None:
         "year_filter": "全部年度",
         "split_filter": "全部切分",
         "hit_filter": HIT_FILTER_ALL,
+        "ratio_model": "ridge_regression_l2",
         "contribution_model": "logistic_regression_l2",
     }
     for key, value in defaults.items():
@@ -1232,7 +1349,7 @@ def render_training_controls() -> None:
     with st.sidebar:
         st.markdown("**現場訓練**")
         if st.button("現場訓練模型", type="primary", use_container_width=True):
-            with st.spinner("正在從 annotation_workbook.csv 產生特徵並訓練模型..."):
+            with st.spinner("正在從 annotation_workbook_ai_assumed.csv 產生特徵並訓練模型..."):
                 try:
                     st.session_state.live_training_payload = run_live_training()
                 except Exception as exc:  # noqa: BLE001
@@ -1268,6 +1385,15 @@ def render_sidebar(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[
         col1.button("2025 測試", use_container_width=True, on_click=apply_preset, args=("test2025",))
         col2.button("2026 最新", use_container_width=True, on_click=apply_preset, args=("latest2026",))
         col3.button("清除", use_container_width=True, on_click=apply_preset, args=("clear",))
+
+        st.markdown("**模型選擇**")
+        st.selectbox(
+            "比例模型",
+            list(RATIO_MODEL_OPTIONS.keys()),
+            key="ratio_model",
+            format_func=ratio_model_label,
+            help="控制右側預測准許比例、預測酌減率與比例模型重要特徵。",
+        )
 
     filtered = filter_cases(cases)
     labels = case_label_map(filtered)
@@ -1329,11 +1455,15 @@ def render_header(item: dict[str, Any]) -> None:
 
 
 def render_metrics(item: dict[str, Any]) -> None:
+    model_key = ratio_model_key()
+    model_label = ratio_model_label(model_key)
+    predicted_remaining = ratio_model_remaining_ratio(item, model_key)
+    predicted_reduction = ratio_model_reduction_rate(item, model_key)
     cols = st.columns(3)
     cols[0].metric("酌減機率", pct(item.get("reductionProbability")), help="Logistic Regression")
-    cols[1].metric("預測准許比例", pct(item.get("ridgePredictedRemainingRatio")), help="Ridge Regression")
-    cols[2].metric("預測酌減率", pct(item.get("ridgePredictedReductionRate")), help="1 - remaining_ratio")
-    st.caption(item.get("riskReason") or "—")
+    cols[1].metric(f"{model_label} 准許比例", pct(predicted_remaining), help=model_label)
+    cols[2].metric(f"{model_label} 酌減率", pct(predicted_reduction), help="1 - selected remaining_ratio")
+    st.caption(live_risk_reason(item.get("reductionProbability"), predicted_reduction))
 
 
 def is_case_trained(item: dict[str, Any]) -> bool:
@@ -1347,7 +1477,7 @@ def render_untrained_model_notice() -> None:
           <h3>尚未現場訓練</h3>
           <p class="muted">
             尚未現場訓練，模型比較會在訓練後顯示。請先按左側「現場訓練模型」，
-            app 會從 annotation_workbook.csv 產生特徵並重新訓練 Logistic、Ridge 與 Lasso。
+            app 會從 annotation_workbook_ai_assumed.csv 產生特徵並重新訓練 Logistic、Ridge 與 Lasso。
           </p>
         </div>
         """
@@ -1355,10 +1485,14 @@ def render_untrained_model_notice() -> None:
 
 
 def render_model_compare(item: dict[str, Any]) -> None:
+    model_key = ratio_model_key()
+    model_label = ratio_model_label(model_key)
+    selected_error = ratio_model_abs_error(item, model_key)
     parts = ['<div class="panel"><h3>模型比較</h3>']
     detail = f"""
       <div class="detail-box">
         <strong>AI 假設版回測對照</strong><br>
+        目前選用比例模型：{safe(model_label)}；絕對誤差：{num(selected_error)}<br>
         是否酌減：{yes_no(item.get("actualIsReduced"))}；
         分類預測：{yes_no(item.get("predictedIsReduced"))}；
         命中：{yes_no(item.get("classificationCorrect"))}<br>
@@ -1389,13 +1523,12 @@ def render_feature_summary(item: dict[str, Any]) -> None:
 
 def render_features(item: dict[str, Any], contributions: dict[str, Any]) -> None:
     st.subheader("重要特徵")
-    model = st.radio(
-        "模型切換",
-        list(CONTRIBUTION_MODELS.keys()),
-        key="contribution_model",
-        format_func=lambda value: CONTRIBUTION_MODELS[value],
-        horizontal=True,
-    )
+    model = ratio_model_contribution_model()
+    model_label = ratio_model_label(ratio_model_key())
+    st.caption(f"目前側欄比例模型：{model_label}")
+    if not model:
+        st.info("Mean baseline 使用訓練集平均准許比例，沒有個案特徵係數可顯示。")
+        return
     rows = visible_feature_rows(contributions.get(str(item.get("jid")), {}).get(model, []))
     if not rows:
         st.info("這個模型沒有可顯示的特徵貢獻。")
@@ -1524,8 +1657,8 @@ def render_feature_correlation() -> None:
         "二元特徵與酌減率的 Pearson 相關等同 point-biserial correlation。"
     )
     try:
-        rows = read_csv_rows(FEATURE_ANALYSIS_PATH)
-        frame = prepare_feature_correlation_frame(rows)
+        rows = read_csv_rows(ANNOTATION_PATH)
+        frame = prepare_annotation_feature_correlation_frame(rows)
         result = compute_feature_correlation(frame)
     except (FileNotFoundError, ValueError) as exc:
         st.warning(f"無法建立相關性分析：{exc}")
@@ -1549,8 +1682,8 @@ def render_feature_correlation() -> None:
     )
     st.dataframe(matrix_style, use_container_width=True)
     st.caption(
-        "「部分完成／部分驗收」在目前 120 件中皆為 1，"
-        "因此相關係數顯示為「—」，不是零相關。"
+        "資料來源為 824 件 AI 假設版高相關案件；若某特徵沒有 0/1 變異，"
+        "其相關係數會顯示為「—」，不是零相關。"
     )
 
     left, right = st.columns(2)

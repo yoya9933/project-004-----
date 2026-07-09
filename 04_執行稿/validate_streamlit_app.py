@@ -12,9 +12,18 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 APP_PATH = PROJECT_ROOT / "streamlit_app.py"
 README_PATH = PROJECT_ROOT / "README.md"
 REQUIREMENTS_PATH = PROJECT_ROOT / "requirements.txt"
-ANNOTATION_PATH = PROJECT_ROOT / "06_交付物" / "ai_rag_annotation" / "annotation_workbook.csv"
-SIMILAR_CASES_PATH = PROJECT_ROOT / "06_交付物" / "rag_model_explanation" / "similar_case_evidence.csv"
-FEATURE_ANALYSIS_PATH = PROJECT_ROOT / "06_交付物" / "120_判決主要特徵值總表.csv"
+ANNOTATION_PATH = (
+    PROJECT_ROOT
+    / "06_交付物"
+    / "ai_rag_annotation_expanded_824"
+    / "annotation_workbook_ai_assumed.csv"
+)
+SIMILAR_CASES_PATH = (
+    PROJECT_ROOT
+    / "06_交付物"
+    / "ai_rag_annotation_expanded_824"
+    / "rag_similar_cases.csv"
+)
 OUTPUT_DIR = PROJECT_ROOT / "05_測試與驗證"
 
 
@@ -40,11 +49,6 @@ def validate() -> dict[str, Any]:
     require(REQUIREMENTS_PATH.exists(), f"Missing requirements file: {REQUIREMENTS_PATH}", failures)
     require(ANNOTATION_PATH.exists(), f"Missing annotation workbook: {ANNOTATION_PATH}", failures)
     require(SIMILAR_CASES_PATH.exists(), f"Missing similar case evidence: {SIMILAR_CASES_PATH}", failures)
-    require(
-        FEATURE_ANALYSIS_PATH.exists(),
-        f"Missing feature analysis CSV: {FEATURE_ANALYSIS_PATH}",
-        failures,
-    )
 
     compile_ok = False
     if APP_PATH.exists():
@@ -77,8 +81,11 @@ def validate() -> dict[str, Any]:
         "render_sidebar",
         "案件儀表板",
         "資料總覽",
-        "FEATURE_ANALYSIS_PATH",
-        "prepare_feature_correlation_frame",
+        "RATIO_MODEL_OPTIONS",
+        "ratio_model_label",
+        "ratio_model_remaining_ratio",
+        'key="ratio_model"',
+        "prepare_annotation_feature_correlation_frame",
         "compute_feature_correlation",
         "render_feature_correlation",
         "特徵相關性",
@@ -112,7 +119,12 @@ def validate() -> dict[str, Any]:
     require("scikit-learn" in requirements_lower, "requirements.txt does not include scikit-learn", failures)
 
     readme = README_PATH.read_text(encoding="utf-8") if README_PATH.exists() else ""
-    for required_text in ["streamlit run streamlit_app.py", "requirements.txt", "annotation_workbook.csv", "現場訓練"]:
+    for required_text in [
+        "streamlit run streamlit_app.py",
+        "requirements.txt",
+        "annotation_workbook_ai_assumed.csv",
+        "現場訓練",
+    ]:
         require(required_text in readme, f"README.md missing text: {required_text}", failures)
     require("酌減區間" not in readme, "README.md still mentions removed bucket metric", failures)
 
@@ -122,8 +134,8 @@ def validate() -> dict[str, Any]:
     for row in similar_rows:
         similar_by_jid.setdefault(row.get("query_JID", ""), []).append(row)
 
-    require(len(annotation_rows) == 120, f"annotation row count != 120: {len(annotation_rows)}", failures)
-    require(len(similar_rows) == 600, f"similar evidence count != 600: {len(similar_rows)}", failures)
+    require(len(annotation_rows) == 824, f"annotation row count != 824: {len(annotation_rows)}", failures)
+    require(len(similar_rows) == 4120, f"similar evidence count != 4120: {len(similar_rows)}", failures)
 
     missing_similar = 0
     for item in annotation_rows:
@@ -143,6 +155,7 @@ def validate() -> dict[str, Any]:
     missing_models = 0
     case_label_includes_jid = False
     hit_filter_ok = False
+    ratio_model_selector_ok = False
     app_module: Any = None
     if APP_PATH.exists() and streamlit_available and pandas_available and sklearn_available:
         try:
@@ -188,24 +201,38 @@ def validate() -> dict[str, Any]:
                 and all(app_module.parse_label(item.get("classificationCorrect")) == 0 for item in wrong_rows)
                 and 'key="hit_filter"' in source
             )
-            live_training_ok = live_training_case_count == 120 and live_training_ratio_count >= 100
+            ratio_sample = {
+                "ridgePredictedRemainingRatio": 0.6,
+                "lassoPredictedRemainingRatio": 0.4,
+                "meanPredictedRemainingRatio": 0.5,
+            }
+            ratio_model_selector_ok = (
+                app_module.ratio_model_label("ridge_regression_l2") == "Ridge"
+                and app_module.ratio_model_label("lasso_regression_l1") == "Lasso"
+                and app_module.ratio_model_label("mean_baseline") == "Mean baseline"
+                and app_module.ratio_model_remaining_ratio(ratio_sample, "ridge_regression_l2") == 0.6
+                and app_module.ratio_model_remaining_ratio(ratio_sample, "lasso_regression_l1") == 0.4
+                and app_module.ratio_model_remaining_ratio(ratio_sample, "mean_baseline") == 0.5
+                and 'key="ratio_model"' in source
+            )
+            live_training_ok = live_training_case_count == 824 and live_training_ratio_count >= 700
         except Exception as exc:  # noqa: BLE001
             failures.append(f"live training failed: {exc}")
     require(live_training_ok, "live training did not produce expected case predictions", failures)
     require(missing_models == 0, f"Cases missing live contribution models: {missing_models}", failures)
     require(case_label_includes_jid, "Case select labels must include JID to distinguish duplicate titles", failures)
     require(hit_filter_ok, "Classification hit sidebar filter is missing or does not filter correctly", failures)
+    require(ratio_model_selector_ok, "Ratio model sidebar selector is missing or does not map model fields correctly", failures)
 
     feature_analysis_ok = False
     feature_analysis_rows = 0
     feature_analysis_reduction_rate_rows = 0
     feature_matrix_shape: list[int] = []
-    constant_feature_is_nan = False
-    if FEATURE_ANALYSIS_PATH.exists() and app_module is not None:
+    finite_feature_correlations = 0
+    if annotation_rows and app_module is not None:
         try:
-            correlation_rows = load_csv(FEATURE_ANALYSIS_PATH)
-            correlation_frame = app_module.prepare_feature_correlation_frame(
-                correlation_rows
+            correlation_frame = app_module.prepare_annotation_feature_correlation_frame(
+                annotation_rows
             )
             correlation_result = app_module.compute_feature_correlation(
                 correlation_frame
@@ -215,16 +242,14 @@ def validate() -> dict[str, Any]:
                 correlation_frame["酌減率"].notna().sum()
             )
             feature_matrix_shape = list(correlation_result["matrix"].shape)
-            constant_value = correlation_result["matrix"].loc[
-                "部分完成／部分驗收", "業主可歸責"
-            ]
-            constant_feature_is_nan = bool(app_module.pd.isna(constant_value))
+            finite_feature_correlations = int(correlation_result["matrix"].notna().sum().sum())
             feature_analysis_ok = (
-                feature_analysis_rows == 120
+                feature_analysis_rows == 824
+                and feature_analysis_reduction_rate_rows == 765
                 and feature_matrix_shape == [6, 6]
                 and len(correlation_result["is_reduced"]) == 6
                 and len(correlation_result["reduction_rate"]) == 6
-                and constant_feature_is_nan
+                and finite_feature_correlations > 0
             )
         except Exception as exc:  # noqa: BLE001
             failures.append(f"feature correlation validation failed: {exc}")
@@ -250,11 +275,12 @@ def validate() -> dict[str, Any]:
             "missingContributionModels": missing_models,
             "caseLabelIncludesJid": case_label_includes_jid,
             "hitFilterOk": hit_filter_ok,
+            "ratioModelSelectorOk": ratio_model_selector_ok,
             "featureAnalysisOk": feature_analysis_ok,
             "featureAnalysisRows": feature_analysis_rows,
             "featureAnalysisReductionRateRows": feature_analysis_reduction_rate_rows,
             "featureMatrixShape": feature_matrix_shape,
-            "constantFeatureIsNan": constant_feature_is_nan,
+            "finiteFeatureCorrelations": finite_feature_correlations,
         },
     }
 
@@ -282,6 +308,10 @@ def write_report(status: dict[str, Any]) -> None:
         f"- 特徵貢獻數：{status['checks']['featureContributionCount']}",
         f"- 缺相似案例案件數：{status['checks']['missingSimilar']}",
         f"- 缺特徵模型案件數：{status['checks']['missingContributionModels']}",
+        f"- 比例模型選單驗證：{status['checks']['ratioModelSelectorOk']}",
+        f"- 特徵相關性案件數：{status['checks']['featureAnalysisRows']}",
+        f"- 特徵相關性酌減率有效樣本數：{status['checks']['featureAnalysisReductionRateRows']}",
+        f"- 特徵相關矩陣有限係數數：{status['checks']['finiteFeatureCorrelations']}",
     ]
     if status["failures"]:
         lines.extend(["", "## 失敗項目", ""])
