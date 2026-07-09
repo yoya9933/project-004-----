@@ -141,6 +141,7 @@ def validate() -> dict[str, Any]:
     live_training_ratio_count = 0
     live_feature_contribution_count = 0
     missing_models = 0
+    case_label_includes_jid = False
     app_module: Any = None
     if APP_PATH.exists() and streamlit_available and pandas_available and sklearn_available:
         try:
@@ -158,11 +159,17 @@ def validate() -> dict[str, Any]:
                 jid = str(item.get("jid", ""))
                 if not required_models.issubset(set(live_result["contributionsByJid"].get(jid, {}).keys())):
                     missing_models += 1
+            label_map = app_module.case_label_map(live_result["cases"])
+            case_label_includes_jid = all(
+                str(item.get("jid", "")) in str(label_map.get(str(item.get("jid", "")), ""))
+                for item in live_result["cases"]
+            )
             live_training_ok = live_training_case_count == 120 and live_training_ratio_count >= 100
         except Exception as exc:  # noqa: BLE001
             failures.append(f"live training failed: {exc}")
     require(live_training_ok, "live training did not produce expected case predictions", failures)
     require(missing_models == 0, f"Cases missing live contribution models: {missing_models}", failures)
+    require(case_label_includes_jid, "Case select labels must include JID to distinguish duplicate titles", failures)
 
     feature_analysis_ok = False
     feature_analysis_rows = 0
@@ -216,6 +223,7 @@ def validate() -> dict[str, Any]:
             "featureContributionCount": live_feature_contribution_count,
             "missingSimilar": missing_similar,
             "missingContributionModels": missing_models,
+            "caseLabelIncludesJid": case_label_includes_jid,
             "featureAnalysisOk": feature_analysis_ok,
             "featureAnalysisRows": feature_analysis_rows,
             "featureAnalysisReductionRateRows": feature_analysis_reduction_rate_rows,

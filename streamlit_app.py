@@ -1198,10 +1198,14 @@ def preferred_jid(cases: list[dict[str, Any]]) -> str | None:
 def case_label_map(cases: list[dict[str, Any]]) -> dict[str, str]:
     labels: dict[str, str] = {}
     for item in cases:
-        jid = str(item.get("jid"))
+        jid = str(item.get("jid") or "")
+        year = item.get("year") or "-"
+        title = item.get("title") or "未命名案件"
+        court = item.get("court") or "未知法院"
         labels[jid] = (
-            f"{item.get('title') or '未命名案件'}"
-            f"｜{item.get('year') or '—'}"
+            f"{year} | {title}"
+            f" | {court}"
+            f" | {jid}"
         )
     return labels
 

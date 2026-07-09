@@ -16,6 +16,7 @@
     "featureContributionCount": 2880,
     "missingSimilar": 0,
     "missingContributionModels": 0,
+    "caseLabelIncludesJid": true,
     "featureAnalysisOk": true,
     "featureAnalysisRows": 120,
     "featureAnalysisReductionRateRows": 115,
