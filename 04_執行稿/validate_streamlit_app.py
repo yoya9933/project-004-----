@@ -67,15 +67,12 @@ def validate() -> dict[str, Any]:
         "is_case_trained",
         "render_untrained_model_notice",
         "color: var(--tool-ink);",
-        '[data-testid="stToolbar"]',
-        '[data-testid="stHeader"]',
         '[data-testid="stAppViewContainer"]',
         '[data-testid="stSidebar"]',
         '[data-testid="stMetric"]',
         '--tool-page: #f4f6f5;',
         '--tool-sidebar: #ffffff;',
         'background: var(--tool-page) !important;',
-        "#MainMenu",
         "尚未現場訓練，模型比較會在訓練後顯示",
         "現場訓練模型",
         "render_sidebar",
@@ -109,6 +106,11 @@ def validate() -> dict[str, Any]:
         "lassoPredictedBucket",
         "reduction_bucket",
         "def reduction_bucket",
+        '[data-testid="stToolbar"],\n          [data-testid="stDecoration"]',
+        '[data-testid="stDecoration"],\n          [data-testid="stStatusWidget"]',
+        "Keep Streamlit's collapsed-sidebar reopen control clickable.",
+        "#MainMenu {\n            display: none",
+        '[data-testid="stHeader"] {\n            height:',
     ]:
         require(removed_text not in source, f"streamlit_app.py still contains removed UI/data field: {removed_text}", failures)
 

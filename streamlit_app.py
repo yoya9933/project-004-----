@@ -167,6 +167,28 @@ def num(value: Any, digits: int = 3) -> str:
     return f"{float(value):.{digits}f}"
 
 
+def pp(value: Any, digits: int = 1) -> str:
+    if not is_number(value):
+        return "—"
+    return f"{abs(float(value)) * 100:.{digits}f} 個百分點"
+
+
+def money(value: Any) -> str:
+    if not is_number(value):
+        return "—"
+    return f"NT$ {float(value):,.0f}"
+
+
+def money_gap(value: Any) -> str:
+    if not is_number(value):
+        return "—"
+    number = float(value)
+    if abs(number) < 0.5:
+        return "相同"
+    direction = "高估" if number > 0 else "低估"
+    return f"{direction} {money(abs(number))}"
+
+
 def yes_no(value: Any) -> str:
     if value == 1:
         return "是"
@@ -195,6 +217,14 @@ def ratio_model_remaining_ratio(item: dict[str, Any], model_key: Any = None) -> 
 def ratio_model_reduction_rate(item: dict[str, Any], model_key: Any = None) -> float | None:
     remaining = ratio_model_remaining_ratio(item, model_key)
     return 1.0 - remaining if remaining is not None else None
+
+
+def ratio_model_allowed_penalty(item: dict[str, Any], model_key: Any = None) -> float | None:
+    claimed_penalty = item.get("claimedPenalty")
+    remaining = ratio_model_remaining_ratio(item, model_key)
+    if not is_number(claimed_penalty) or remaining is None:
+        return None
+    return float(claimed_penalty) * remaining
 
 
 def ratio_model_abs_error(item: dict[str, Any], model_key: Any = None) -> float | None:
@@ -537,6 +567,191 @@ def live_risk_reason(probability: float | None, predicted_reduction_rate: float 
     return "，".join(parts)
 
 
+def label_is_reduced(value: Any) -> str:
+    parsed = parse_label(value)
+    if parsed == 1:
+        return "有酌減"
+    if parsed == 0:
+        return "未酌減"
+    return "—"
+
+
+def classification_feedback(item: dict[str, Any]) -> tuple[str, str, str]:
+    actual = parse_label(item.get("actualIsReduced"))
+    predicted = parse_label(item.get("predictedIsReduced"))
+    if actual is None or predicted is None:
+        return (
+            "分類尚未評分",
+            "feedback-neutral",
+            "缺少分類預測或原判決是否酌減標註。",
+        )
+    if actual == predicted:
+        return (
+            "方向命中",
+            "feedback-good",
+            f"模型判斷{label_is_reduced(predicted)}，原判決也是{label_is_reduced(actual)}。",
+        )
+    return (
+        "方向未命中",
+        "feedback-bad",
+        f"模型判斷{label_is_reduced(predicted)}，但原判決是{label_is_reduced(actual)}。",
+    )
+
+
+def ratio_feedback(error: Any) -> tuple[str, str, str]:
+    if not is_number(error):
+        return (
+            "比例尚未評分",
+            "feedback-neutral",
+            "缺少比例預測或原判決准許比例。",
+        )
+    ratio_error = float(error)
+    if ratio_error <= 0.10:
+        return (
+            "比例精準",
+            "feedback-good",
+            "准許比例差距在 10 個百分點內。",
+        )
+    if ratio_error <= 0.20:
+        return (
+            "比例可參考",
+            "feedback-watch",
+            "准許比例差距在 20 個百分點內。",
+        )
+    return (
+        "比例偏差大",
+        "feedback-bad",
+        "准許比例差距超過 20 個百分點。",
+    )
+
+
+def overall_prediction_feedback(item: dict[str, Any], model_key: Any = None) -> tuple[str, str, str]:
+    correct = parse_label(item.get("classificationCorrect"))
+    error = ratio_model_abs_error(item, model_key)
+    if correct is None and error is None:
+        return (
+            "尚未產生回饋",
+            "feedback-neutral",
+            "請先在左側執行現場訓練，才會顯示這筆案例的即時回饋。",
+        )
+    if correct == 1 and is_number(error) and float(error) <= 0.10:
+        return (
+            "方向與比例都接近",
+            "feedback-good",
+            "這筆案例的是否酌減方向命中，准許比例也貼近原判決。",
+        )
+    if correct == 1 and is_number(error) and float(error) <= 0.20:
+        return (
+            "方向命中，比例可參考",
+            "feedback-watch",
+            "模型抓到是否酌減方向，但准許比例仍有可見差距。",
+        )
+    if correct == 1:
+        return (
+            "方向命中，比例需修正",
+            "feedback-watch",
+            "是否酌減方向正確，但准許比例偏離原判決較多。",
+        )
+    if correct == 0 and is_number(error) and float(error) <= 0.20:
+        return (
+            "比例接近，但方向未命中",
+            "feedback-watch",
+            "准許比例差距不大，但是否酌減的二元判斷沒有對上原判決。",
+        )
+    return (
+        "本案預測偏離原判決",
+        "feedback-bad",
+        "方向或比例至少一項偏離，這筆案例應回到判決理由與特徵標註檢查。",
+    )
+
+
+def average(values: list[float]) -> float | None:
+    clean = [float(value) for value in values if math.isfinite(float(value))]
+    if not clean:
+        return None
+    return sum(clean) / len(clean)
+
+
+def performance_summary_rows(cases: list[dict[str, Any]], model_key: Any = None) -> list[dict[str, Any]]:
+    ratio_key = ratio_model_key(model_key)
+    model_label = ratio_model_label(ratio_key)
+    split_keys = sorted(
+        {str(item.get("split")) for item in cases if item.get("split")},
+        key=lambda value: SPLIT_ORDER.get(value, 99),
+    )
+    groups: list[tuple[str, str, list[dict[str, Any]]]] = [
+        (
+            split_key,
+            split_label(split_key),
+            [item for item in cases if item.get("split") == split_key],
+        )
+        for split_key in split_keys
+    ]
+    groups.append(("overall", "整體", cases))
+
+    rows: list[dict[str, Any]] = []
+    for split_key, label, split_cases in groups:
+        class_samples = [
+            item for item in split_cases if parse_label(item.get("actualIsReduced")) is not None
+        ]
+        scored_class_samples = [
+            item
+            for item in class_samples
+            if parse_label(item.get("predictedIsReduced")) is not None
+        ]
+        correct_count = sum(
+            1
+            for item in scored_class_samples
+            if parse_label(item.get("actualIsReduced")) == parse_label(item.get("predictedIsReduced"))
+        )
+        predicted_reduced = [
+            item for item in scored_class_samples if parse_label(item.get("predictedIsReduced")) == 1
+        ]
+        true_positive = sum(
+            1 for item in predicted_reduced if parse_label(item.get("actualIsReduced")) == 1
+        )
+        ratio_samples = [
+            item for item in split_cases if item.get("targetQuality") == "ok"
+        ]
+        ratio_errors = [
+            error
+            for item in ratio_samples
+            if is_number(error := ratio_model_abs_error(item, ratio_key))
+        ]
+        accuracy = (
+            correct_count / len(scored_class_samples)
+            if scored_class_samples
+            else None
+        )
+        precision = true_positive / len(predicted_reduced) if predicted_reduced else None
+        mae = average([float(error) for error in ratio_errors])
+        within_10pp = (
+            sum(1 for error in ratio_errors if float(error) <= 0.10) / len(ratio_errors)
+            if ratio_errors
+            else None
+        )
+        within_20pp = (
+            sum(1 for error in ratio_errors if float(error) <= 0.20) / len(ratio_errors)
+            if ratio_errors
+            else None
+        )
+        rows.append(
+            {
+                "split": split_key,
+                "資料切分": label,
+                "全部案件": len(split_cases),
+                "分類樣本(n)": len(class_samples),
+                "比例樣本(n)": len(ratio_samples),
+                "分類命中率": pct(accuracy),
+                "酌減 precision": pct(precision),
+                f"{model_label} 平均比例誤差": pp(mae),
+                "10pp內比例": pct(within_10pp),
+                "20pp內比例": pct(within_20pp),
+            }
+        )
+    return rows
+
+
 def actual_ratios(row: dict[str, Any]) -> tuple[float | None, float | None]:
     claimed = to_float_or_none(row.get("claimed_penalty"))
     allowed = to_float_or_none(row.get("allowed_penalty"))
@@ -553,6 +768,8 @@ def actual_ratios(row: dict[str, Any]) -> tuple[float | None, float | None]:
 def format_base_case(row: dict[str, str]) -> dict[str, Any]:
     year = to_int_or_none(row.get("decision_year"))
     split = split_for_year(year)
+    claimed_penalty = to_float_or_none(row.get("claimed_penalty"))
+    allowed_penalty = to_float_or_none(row.get("allowed_penalty"))
     remaining, reduction = actual_ratios(row)
     return {
         "jid": row.get("JID", ""),
@@ -568,6 +785,9 @@ def format_base_case(row: dict[str, str]) -> dict[str, Any]:
         "predictedIsReduced": None,
         "classificationCorrect": None,
         "reductionProbability": None,
+        "claimedPenalty": claimed_penalty,
+        "allowedPenalty": allowed_penalty,
+        "targetQuality": target_quality(claimed_penalty, allowed_penalty, remaining),
         "actualRemainingRatio": remaining,
         "actualReductionRate": reduction,
         "meanPredictedRemainingRatio": None,
@@ -1025,27 +1245,12 @@ def install_style() -> None:
             background: var(--tool-accent) !important;
             color: #ffffff !important;
           }
-          [data-testid="stToolbar"],
-          [data-testid="stDecoration"],
-          [data-testid="stStatusWidget"],
-          #MainMenu {
-            display: none !important;
-            visibility: hidden !important;
-          }
-          [data-testid="stHeader"] {
-            height: 0 !important;
-            min-height: 0 !important;
-            background: transparent !important;
-          }
           .block-container {
-            padding-top: 0.75rem;
+            padding-top: 2.75rem;
             padding-bottom: 2rem;
           }
           .tool-title {
-            display: flex;
-            justify-content: space-between;
-            gap: 1rem;
-            align-items: flex-start;
+            display: block;
             padding: 1rem 1.1rem;
             border: 1px solid var(--tool-line);
             border-radius: 8px;
@@ -1054,12 +1259,39 @@ def install_style() -> None:
             min-width: 0;
             overflow-wrap: anywhere;
           }
+          .case-heading {
+            min-width: 0;
+          }
           .tool-title h1 {
             margin: 0;
             color: var(--tool-ink);
             font-size: 1.65rem;
             line-height: 1.2;
             letter-spacing: 0;
+          }
+          .case-meta-line {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 0.55rem 0.75rem;
+            align-items: center;
+            margin-top: 0.55rem;
+            min-width: 0;
+            color: var(--tool-muted);
+            font-size: 0.88rem;
+            line-height: 1.45;
+          }
+          .case-id-label {
+            display: inline;
+            color: var(--tool-muted);
+            font-weight: 900;
+          }
+          .case-id-value {
+            display: inline;
+            color: var(--tool-ink);
+            font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace;
+            font-size: 0.84rem;
+            font-weight: 800;
+            overflow-wrap: anywhere;
           }
           .eyebrow {
             margin: 0 0 0.25rem 0;
@@ -1125,6 +1357,75 @@ def install_style() -> None:
           }
           .detail-box strong {
             color: var(--tool-ink);
+          }
+          .prediction-feedback {
+            margin: 0.15rem 0 0.95rem;
+            padding: 0.15rem 0 0.15rem 0.85rem;
+            border-left: 4px solid var(--tool-muted);
+            color: var(--tool-ink);
+          }
+          .prediction-feedback h4 {
+            margin: 0.1rem 0 0.25rem;
+            font-size: 1.02rem;
+            letter-spacing: 0;
+          }
+          .prediction-feedback p {
+            margin: 0;
+            color: var(--tool-muted);
+            line-height: 1.55;
+          }
+          .feedback-kicker {
+            color: var(--tool-accent) !important;
+            font-size: 0.78rem;
+            font-weight: 900;
+          }
+          .feedback-good {
+            border-left-color: var(--risk-low);
+          }
+          .feedback-watch {
+            border-left-color: #a16207;
+          }
+          .feedback-bad {
+            border-left-color: var(--risk-high);
+          }
+          .feedback-neutral {
+            border-left-color: var(--tool-muted);
+          }
+          .judgment-grid,
+          .feedback-grid {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 0 0.9rem;
+            margin-top: 0.8rem;
+            border-top: 1px solid var(--tool-line);
+          }
+          .judgment-grid > div,
+          .feedback-grid > div {
+            min-width: 0;
+            padding: 0.72rem 0 0.2rem;
+            border-bottom: 1px solid var(--tool-line);
+          }
+          .judgment-label,
+          .feedback-label {
+            display: block;
+            color: var(--tool-muted);
+            font-size: 0.78rem;
+            font-weight: 850;
+          }
+          .judgment-value,
+          .feedback-value {
+            display: block;
+            color: var(--tool-ink);
+            font-size: 0.98rem;
+            font-weight: 900;
+            line-height: 1.35;
+            overflow-wrap: anywhere;
+          }
+          .feedback-text {
+            margin: 0.2rem 0 0;
+            color: var(--tool-muted);
+            font-size: 0.88rem;
+            line-height: 1.55;
           }
           .similar-card {
             display: grid;
@@ -1214,6 +1515,10 @@ def install_style() -> None:
             overflow-wrap: anywhere;
           }
           @media (max-width: 900px) {
+            .judgment-grid,
+            .feedback-grid {
+              grid-template-columns: minmax(0, 1fr);
+            }
             .feature-grid {
               grid-template-columns: minmax(0, 1fr) minmax(4.5rem, 0.45fr) minmax(4.5rem, 0.45fr);
             }
@@ -1222,7 +1527,6 @@ def install_style() -> None:
             }
           }
           @media (max-width: 700px) {
-            .tool-title,
             .bar-row,
             .similar-card {
               display: block;
@@ -1444,10 +1748,12 @@ def render_header(item: dict[str, Any]) -> None:
     render_html(
         f"""
         <div class="tool-title">
-          <div>
+          <div class="case-heading">
             <p class="eyebrow">{safe(item.get("year"))}｜{safe(item.get("splitLabel"))}｜{safe(item.get("court"))}</p>
             <h1>{safe(item.get("title") or "未命名案件")}</h1>
-            <p class="muted">{safe(item.get("jid"))}</p>
+            <div class="case-meta-line">
+              <span><span class="case-id-label">案號</span> <span class="case-id-value">{safe(item.get("jid"))}</span></span>
+            </div>
           </div>
         </div>
         """
@@ -1487,17 +1793,76 @@ def render_untrained_model_notice() -> None:
 def render_model_compare(item: dict[str, Any]) -> None:
     model_key = ratio_model_key()
     model_label = ratio_model_label(model_key)
+    predicted_remaining = ratio_model_remaining_ratio(item, model_key)
+    predicted_reduction = ratio_model_reduction_rate(item, model_key)
+    predicted_allowed = ratio_model_allowed_penalty(item, model_key)
+    amount_gap = (
+        predicted_allowed - float(item["allowedPenalty"])
+        if predicted_allowed is not None and is_number(item.get("allowedPenalty"))
+        else None
+    )
     selected_error = ratio_model_abs_error(item, model_key)
-    parts = ['<div class="panel"><h3>模型比較</h3>']
+    overall_label, overall_class, overall_detail = overall_prediction_feedback(item, model_key)
+    class_label, class_class, class_detail = classification_feedback(item)
+    ratio_label, ratio_class, ratio_detail = ratio_feedback(selected_error)
+    parts = ['<div class="panel"><h3>預測示範回饋</h3>']
     detail = f"""
+      <div class="prediction-feedback {safe(overall_class)}">
+        <p class="feedback-kicker">即時回饋</p>
+        <h4>{safe(overall_label)}</h4>
+        <p>{safe(overall_detail)}</p>
+      </div>
+      <div class="judgment-grid">
+        <div>
+          <span class="judgment-label">原判決是否酌減</span>
+          <span class="judgment-value">{safe(label_is_reduced(item.get("actualIsReduced")))}</span>
+        </div>
+        <div>
+          <span class="judgment-label">模型分類預測</span>
+          <span class="judgment-value">{safe(label_is_reduced(item.get("predictedIsReduced")))}</span>
+        </div>
+        <div>
+          <span class="judgment-label">主張違約金</span>
+          <span class="judgment-value">{money(item.get("claimedPenalty"))}</span>
+        </div>
+        <div>
+          <span class="judgment-label">法院准許違約金</span>
+          <span class="judgment-value">{money(item.get("allowedPenalty"))}</span>
+        </div>
+        <div>
+          <span class="judgment-label">原判決准許比例</span>
+          <span class="judgment-value">{pct(item.get("actualRemainingRatio"))}</span>
+        </div>
+        <div>
+          <span class="judgment-label">{safe(model_label)} 預測准許比例</span>
+          <span class="judgment-value">{pct(predicted_remaining)}</span>
+        </div>
+        <div>
+          <span class="judgment-label">{safe(model_label)} 預測准許金額</span>
+          <span class="judgment-value">{money(predicted_allowed)}</span>
+        </div>
+        <div>
+          <span class="judgment-label">與法院准許金額差距</span>
+          <span class="judgment-value">{money_gap(amount_gap)}</span>
+        </div>
+      </div>
+      <div class="feedback-grid">
+        <div class="prediction-feedback {safe(class_class)}">
+          <span class="feedback-label">是否酌減方向</span>
+          <span class="feedback-value">{safe(class_label)}</span>
+          <p class="feedback-text">{safe(class_detail)}</p>
+        </div>
+        <div class="prediction-feedback {safe(ratio_class)}">
+          <span class="feedback-label">准許比例能力</span>
+          <span class="feedback-value">{safe(ratio_label)}，差距 {pp(selected_error)}</span>
+          <p class="feedback-text">{safe(ratio_detail)} {safe(model_label)} 預測酌減率 {pct(predicted_reduction)}。</p>
+        </div>
+      </div>
       <div class="detail-box">
         <strong>AI 假設版回測對照</strong><br>
         目前選用比例模型：{safe(model_label)}；絕對誤差：{num(selected_error)}<br>
-        是否酌減：{yes_no(item.get("actualIsReduced"))}；
-        分類預測：{yes_no(item.get("predictedIsReduced"))}；
-        命中：{yes_no(item.get("classificationCorrect"))}<br>
-        實際准許比例：{pct(item.get("actualRemainingRatio"))}；
-        實際酌減率：{pct(item.get("actualReductionRate"))}<br>
+        實際酌減率：{pct(item.get("actualReductionRate"))}；
+        {safe(model_label)} 預測酌減率：{pct(predicted_reduction)}<br>
         Ridge 誤差：{num(item.get("ridgeAbsError"))}；
         Lasso 誤差：{num(item.get("lassoAbsError"))}；
         Mean baseline 誤差：{num(item.get("meanAbsError"))}
@@ -1609,6 +1974,32 @@ def render_overview(payload: dict[str, Any], filtered: list[dict[str, Any]]) -> 
     with right:
         st.markdown("**時間切分**")
         st.json({SPLIT_LABELS.get(k, k): v for k, v in split_counts.items()}, expanded=False)
+
+
+def render_performance_summary(payload: dict[str, Any]) -> None:
+    cases: list[dict[str, Any]] = payload["cases"]
+    model_key = ratio_model_key()
+    model_label = ratio_model_label(model_key)
+    rows = performance_summary_rows(cases, model_key)
+    by_split = {row["split"]: row for row in rows}
+    overall = by_split.get("overall", {})
+    train = by_split.get("train_2021_2023", {})
+    validation = by_split.get("validation_2024", {})
+
+    st.markdown("### 整體回測能力")
+    st.caption(
+        "訓練集 2021-2023 是 in-sample；2024 驗證、2025 測試與 2026 最新年度是 out-of-time 回測。"
+        "分類命中率是是否酌減方向的 accuracy；酌減 precision 只看模型預測為酌減的案件；"
+        f"{model_label} 平均比例誤差是准許比例 MAE。"
+    )
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("訓練分類樣本", train.get("分類樣本(n)", "—"))
+    col2.metric("驗證分類樣本", validation.get("分類樣本(n)", "—"))
+    col3.metric("整體分類命中率", overall.get("分類命中率", "—"))
+    col4.metric(f"{model_label} 整體 MAE", overall.get(f"{model_label} 平均比例誤差", "—"))
+
+    display_rows = [{key: value for key, value in row.items() if key != "split"} for row in rows]
+    st.dataframe(display_rows, use_container_width=True, hide_index=True)
 
 
 def correlation_cell_style(value: Any) -> str:
@@ -1756,6 +2147,7 @@ def main() -> None:
 
     with tab_data:
         render_overview(payload, filtered)
+        render_performance_summary(payload)
         rows = [
             {
                 "案號": item.get("jid"),
