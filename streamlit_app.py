@@ -73,6 +73,20 @@ HIT_FILTER_ALL = "全部"
 HIT_FILTER_CORRECT = "命中"
 HIT_FILTER_WRONG = "未命中"
 HIT_FILTER_OPTIONS = [HIT_FILTER_ALL, HIT_FILTER_CORRECT, HIT_FILTER_WRONG]
+RATIO_ABILITY_ALL = "全部"
+RATIO_ABILITY_SCORABLE = "可評估准許比例"
+RATIO_ABILITY_STRONG = "10pp 內"
+RATIO_ABILITY_USABLE = "20pp 內"
+RATIO_ABILITY_WEAK = "超過 20pp"
+RATIO_ABILITY_UNSCORABLE = "無法評估"
+RATIO_ABILITY_OPTIONS = [
+    RATIO_ABILITY_ALL,
+    RATIO_ABILITY_SCORABLE,
+    RATIO_ABILITY_STRONG,
+    RATIO_ABILITY_USABLE,
+    RATIO_ABILITY_WEAK,
+    RATIO_ABILITY_UNSCORABLE,
+]
 CONTRIBUTION_MODELS = {
     "logistic_regression_l2": "分類 Logistic",
     "ridge_regression_l2": "比例 Ridge",
@@ -1560,6 +1574,7 @@ def ensure_session_defaults() -> None:
         "year_filter": "全部年度",
         "split_filter": "全部切分",
         "hit_filter": HIT_FILTER_ALL,
+        "ratio_ability_filter": RATIO_ABILITY_ALL,
         "ratio_model": "ridge_regression_l2",
         "contribution_model": "logistic_regression_l2",
     }
@@ -1572,6 +1587,7 @@ def apply_preset(name: str) -> None:
     st.session_state.year_filter = "全部年度"
     st.session_state.split_filter = "全部切分"
     st.session_state.hit_filter = HIT_FILTER_ALL
+    st.session_state.ratio_ability_filter = RATIO_ABILITY_ALL
     if name == "test2025":
         st.session_state.year_filter = "2025"
         st.session_state.split_filter = "test_2025"
@@ -1595,11 +1611,31 @@ def matches_hit_filter(item: dict[str, Any], hit_filter: str) -> bool:
     return True
 
 
+def matches_ratio_ability_filter(item: dict[str, Any], ability_filter: str, model_key: str) -> bool:
+    if ability_filter == RATIO_ABILITY_ALL:
+        return True
+
+    error = ratio_model_abs_error(item, model_key)
+    if error is None:
+        return ability_filter == RATIO_ABILITY_UNSCORABLE
+    if ability_filter == RATIO_ABILITY_SCORABLE:
+        return True
+    if ability_filter == RATIO_ABILITY_STRONG:
+        return error <= 0.10
+    if ability_filter == RATIO_ABILITY_USABLE:
+        return error <= 0.20
+    if ability_filter == RATIO_ABILITY_WEAK:
+        return error > 0.20
+    return True
+
+
 def filter_cases(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
     keyword = str(st.session_state.search_query).strip().lower()
     year = "" if st.session_state.year_filter == "全部年度" else st.session_state.year_filter
     split = "" if st.session_state.split_filter == "全部切分" else st.session_state.split_filter
     hit_filter = str(st.session_state.hit_filter)
+    ratio_ability_filter = str(st.session_state.ratio_ability_filter)
+    ratio_key = ratio_model_key()
 
     rows: list[dict[str, Any]] = []
     for item in cases:
@@ -1611,6 +1647,8 @@ def filter_cases(cases: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if split and item.get("split") != split:
             continue
         if not matches_hit_filter(item, hit_filter):
+            continue
+        if not matches_ratio_ability_filter(item, ratio_ability_filter, ratio_key):
             continue
         rows.append(item)
 
@@ -1726,6 +1764,12 @@ def render_sidebar(payload: dict[str, Any]) -> tuple[list[dict[str, Any]], dict[
         st.selectbox("年度", ["全部年度", *years], key="year_filter")
         st.selectbox("切分", ["全部切分", *splits], key="split_filter", format_func=split_label)
         st.selectbox("分類命中", HIT_FILTER_OPTIONS, key="hit_filter")
+        st.selectbox(
+            "准許比例能力",
+            RATIO_ABILITY_OPTIONS,
+            key="ratio_ability_filter",
+            help="依目前比例模型的准許比例絕對誤差篩選。10pp/20pp 代表預測准許比例與實際准許比例的百分點差距。",
+        )
 
         st.markdown(f"**符合條件：{len(filtered)} 件**")
         if not filtered:
