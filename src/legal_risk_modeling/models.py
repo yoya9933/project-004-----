@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 from sklearn.dummy import DummyRegressor
+from sklearn.ensemble import ExtraTreesRegressor, GradientBoostingRegressor, HistGradientBoostingRegressor, RandomForestRegressor
 from sklearn.linear_model import ElasticNet, Lasso, Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
@@ -15,12 +16,7 @@ def build_ratio_candidates(random_state: int = 42) -> dict[str, list[tuple[str, 
         "ridge_regression_l2": [
             (
                 f"ridge_alpha_{alpha:g}",
-                Pipeline(
-                    [
-                        ("scale", StandardScaler()),
-                        ("model", Ridge(alpha=alpha)),
-                    ]
-                ),
+                Pipeline([("scale", StandardScaler()), ("model", Ridge(alpha=alpha))]),
             )
             for alpha in [0.001, 0.01, 0.05, 0.1, 1.0, 10.0, 100.0]
         ],
@@ -57,11 +53,68 @@ def build_ratio_candidates(random_state: int = 42) -> dict[str, list[tuple[str, 
             for alpha in [0.0001, 0.001, 0.005, 0.01, 0.05]
             for l1_ratio in [0.2, 0.5, 0.8]
         ],
+        "random_forest": [
+            (
+                f"rf_depth_{depth}_leaf_{leaf}",
+                RandomForestRegressor(
+                    n_estimators=500,
+                    max_depth=depth,
+                    min_samples_leaf=leaf,
+                    random_state=random_state,
+                    n_jobs=-1,
+                ),
+            )
+            for depth in [3, 5, 8, None]
+            for leaf in [5, 10, 20]
+        ],
+        "extra_trees": [
+            (
+                f"extra_depth_{depth}_leaf_{leaf}",
+                ExtraTreesRegressor(
+                    n_estimators=500,
+                    max_depth=depth,
+                    min_samples_leaf=leaf,
+                    random_state=random_state,
+                    n_jobs=-1,
+                ),
+            )
+            for depth in [3, 5, 8, None]
+            for leaf in [5, 10, 20]
+        ],
+        "gradient_boosting": [
+            (
+                f"gbr_depth_{depth}_lr_{learning_rate:g}_leaf_{leaf}",
+                GradientBoostingRegressor(
+                    n_estimators=300,
+                    learning_rate=learning_rate,
+                    max_depth=depth,
+                    min_samples_leaf=leaf,
+                    random_state=random_state,
+                ),
+            )
+            for depth in [1, 2, 3]
+            for learning_rate in [0.01, 0.03, 0.05]
+            for leaf in [5, 10, 20]
+        ],
+        "hist_gradient_boosting": [
+            (
+                f"hist_lr_{learning_rate:g}_leaf_{leaf}_l2_{l2:g}",
+                HistGradientBoostingRegressor(
+                    max_iter=300,
+                    learning_rate=learning_rate,
+                    min_samples_leaf=leaf,
+                    l2_regularization=l2,
+                    random_state=random_state,
+                ),
+            )
+            for learning_rate in [0.01, 0.03, 0.05]
+            for leaf in [10, 20, 30]
+            for l2 in [0.0, 0.1, 1.0]
+        ],
     }
 
 
 def model_spec() -> dict[str, Any]:
-    """Serializable model policy used by manifests and tests."""
     return {
         "target": "remaining_ratio",
         "prediction_clip": [0.0, 1.0],
