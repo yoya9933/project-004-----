@@ -1,0 +1,10 @@
+{
+  "status": "approved",
+  "default_model": "mean_baseline",
+  "approved_models": [],
+  "baseline": "mean_baseline",
+  "predictions_artifact": "06_交付物/reduction_ratio_model_expanded_824_sklearn/predictions.csv",
+  "metrics_artifact": "06_交付物/reduction_ratio_model_expanded_824_sklearn/metrics.csv",
+  "promotion_report": "06_交付物/reduction_ratio_model_expanded_824_sklearn/promotion_report.json",
+  "note": "No learned model currently passes the promotion gate, so the UI default is Mean baseline."
+}
