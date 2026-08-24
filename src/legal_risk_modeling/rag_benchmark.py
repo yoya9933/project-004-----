@@ -7,7 +7,7 @@ from typing import Any
 
 import pandas as pd
 
-from .rag_human_gold import approved_human_gold, load_human_gold
+from .rag_human_gold import eligible_human_gold, load_human_gold
 
 
 def _column(frame: pd.DataFrame, *candidates: str) -> str:
@@ -200,14 +200,20 @@ def evaluate_human_gold(
     human_gold: pd.DataFrame,
     *,
     k: int = 3,
+    min_judgments_per_query: int = 5,
+    min_relevant_per_query: int = 1,
 ) -> tuple[dict[str, Any], pd.DataFrame]:
     if k <= 0:
         raise ValueError("k must be positive")
-    approved = approved_human_gold(human_gold)
+    eligible, eligibility = eligible_human_gold(
+        human_gold,
+        min_judgments_per_query=min_judgments_per_query,
+        min_relevant_per_query=min_relevant_per_query,
+    )
     work = _ranked_retrieval(retrieval)
     per_query: list[dict[str, Any]] = []
 
-    for query_jid, judgments in approved.groupby("query_jid", sort=True):
+    for query_jid, judgments in eligible.groupby("query_jid", sort=True):
         grade_by_jid = {
             str(row["candidate_jid"]).strip(): int(row["relevance_grade"])
             for _, row in judgments.iterrows()
@@ -238,7 +244,7 @@ def evaluate_human_gold(
                 "retrieved_count": int(len(retrieved)),
                 "hit_count": int(len(hits)),
                 f"precision_at_{k}": len(hits) / k,
-                f"recall_at_{k}": len(hits) / len(relevant) if relevant else 0.0,
+                f"recall_at_{k}": len(hits) / len(relevant),
                 f"hit_rate_at_{k}": 1.0 if hits else 0.0,
                 f"reciprocal_rank_at_{k}": 1.0 / first_hit_rank if first_hit_rank else 0.0,
                 f"ndcg_at_{k}": ndcg,
@@ -249,12 +255,20 @@ def evaluate_human_gold(
 
     per_query_df = pd.DataFrame(per_query)
     base = {
-        "schema_version": 1,
-        "gold_definition": "human_graded_v1",
+        "schema_version": 2,
+        "gold_definition": "human_graded_v2",
         "relevance_grades": [0, 1, 2, 3],
         "k": k,
         "query_count": int(len(per_query_df)),
-        "judgment_count": int(len(approved)),
+        "judgment_count": int(len(eligible)),
+        "approved_query_count": eligibility["approved_query_count"],
+        "approved_judgment_count": eligibility["approved_judgment_count"],
+        "eligible_query_count": eligibility["eligible_query_count"],
+        "ineligible_query_count": eligibility["ineligible_query_count"],
+        "eligibility_policy": {
+            "min_judgments_per_query": eligibility["min_judgments_per_query"],
+            "min_relevant_per_query": eligibility["min_relevant_per_query"],
+        },
     }
     if per_query_df.empty:
         return {
@@ -303,10 +317,18 @@ def write_human_benchmark(
     output_dir: Path,
     *,
     k: int = 3,
+    min_judgments_per_query: int = 5,
+    min_relevant_per_query: int = 1,
 ) -> dict[str, Any]:
     retrieval = pd.read_csv(retrieval_path, encoding="utf-8-sig")
     human_gold = load_human_gold(human_gold_path)
-    metrics, per_query = evaluate_human_gold(retrieval, human_gold, k=k)
+    metrics, per_query = evaluate_human_gold(
+        retrieval,
+        human_gold,
+        k=k,
+        min_judgments_per_query=min_judgments_per_query,
+        min_relevant_per_query=min_relevant_per_query,
+    )
     output_dir.mkdir(parents=True, exist_ok=True)
     (output_dir / "human_metrics.json").write_text(
         json.dumps(metrics, ensure_ascii=False, indent=2), encoding="utf-8"
