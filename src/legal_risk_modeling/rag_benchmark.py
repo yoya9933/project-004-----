@@ -56,21 +56,39 @@ def _metadata(metadata: pd.DataFrame) -> dict[str, dict[str, str]]:
     return result
 
 
-def build_structured_gold(metadata: pd.DataFrame) -> dict[str, set[str]]:
+def build_structured_gold(
+    metadata: pd.DataFrame,
+    *,
+    min_basis_peers: int = 3,
+) -> dict[str, set[str]]:
+    if min_basis_peers <= 0:
+        raise ValueError("min_basis_peers must be positive")
+
     cases = _metadata(metadata)
     gold: dict[str, set[str]] = {}
     for query_jid, query in cases.items():
         if not query["outcome"]:
             continue
-        relevant: set[str] = set()
-        for candidate_jid, candidate in cases.items():
-            if candidate_jid == query_jid or candidate["outcome"] != query["outcome"]:
-                continue
-            if query["basis"] and candidate["basis"] != query["basis"]:
-                continue
-            relevant.add(candidate_jid)
-        if relevant:
-            gold[query_jid] = relevant
+
+        outcome_peers = {
+            candidate_jid
+            for candidate_jid, candidate in cases.items()
+            if candidate_jid != query_jid and candidate["outcome"] == query["outcome"]
+        }
+        if not outcome_peers:
+            continue
+
+        relevant = outcome_peers
+        if query["basis"]:
+            basis_peers = {
+                candidate_jid
+                for candidate_jid in outcome_peers
+                if cases[candidate_jid]["basis"] == query["basis"]
+            }
+            if len(basis_peers) >= min_basis_peers:
+                relevant = basis_peers
+
+        gold[query_jid] = relevant
     return gold
 
 
@@ -97,7 +115,7 @@ def evaluate_retrieval(
         work["__rank"] = pd.to_numeric(work[rank_col], errors="coerce").fillna(10**9)
         work = work.sort_values(["__query", "__rank"], kind="stable")
 
-    gold = build_structured_gold(metadata)
+    gold = build_structured_gold(metadata, min_basis_peers=k)
     per_query: list[dict[str, Any]] = []
     golden_rows: list[dict[str, str]] = []
 
@@ -134,7 +152,9 @@ def evaluate_retrieval(
             {
                 "query_jid": query_jid,
                 "relevant_jids": "|".join(sorted(relevant)),
-                "gold_definition": "same is_reduced and, when present, same legal_basis",
+                "gold_definition": (
+                    "same is_reduced; narrow to same legal_basis only when at least k peers exist"
+                ),
             }
         )
 
@@ -142,8 +162,8 @@ def evaluate_retrieval(
     golden_df = pd.DataFrame(golden_rows)
     if per_query_df.empty:
         metrics = {
-            "schema_version": 1,
-            "gold_definition": "structured_proxy_v1",
+            "schema_version": 2,
+            "gold_definition": "structured_proxy_v2",
             "k": k,
             "query_count": 0,
             f"precision_at_{k}": 0.0,
@@ -153,8 +173,8 @@ def evaluate_retrieval(
         }
     else:
         metrics = {
-            "schema_version": 1,
-            "gold_definition": "structured_proxy_v1",
+            "schema_version": 2,
+            "gold_definition": "structured_proxy_v2",
             "k": k,
             "query_count": int(len(per_query_df)),
             f"precision_at_{k}": float(per_query_df[f"precision_at_{k}"].mean()),

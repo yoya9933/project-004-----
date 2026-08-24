@@ -68,7 +68,7 @@ jobs:
         run: |
           python 04_執行稿/run_rag_retrieval_benchmark.py \
             --retrieval-csv .artifacts/ai_rag_annotation/rag_similar_cases.csv \
-            --metadata-csv .artifacts/ai_rag_annotation/annotation_workbook.csv \
+            --metadata-csv 06_交付物/ai_rag_annotation/annotation_workbook.csv \
             --min-queries 20
 
       - name: Run governed ratio training
@@ -77,7 +77,7 @@ jobs:
       - name: Run governed classification pipeline
         run: |
           python 04_執行稿/run_is_reduced_classification.py \
-            --input-csv .artifacts/ai_rag_annotation/annotation_workbook.csv \
+            --input-csv 06_交付物/ai_rag_annotation/annotation_workbook.csv \
             --run-id "ci-classification-${GITHUB_SHA}"
 
       - name: Validate manifests and governed release
@@ -139,7 +139,7 @@ jobs:
           status = json.loads((classification / 'model_status.json').read_text(encoding='utf-8'))
           assert status['status'] in {'trained', 'skipped'}
           rag_metrics = json.loads((rag / 'metrics.json').read_text(encoding='utf-8'))
-          assert rag_metrics['gold_definition'] == 'structured_proxy_v1'
+          assert rag_metrics['gold_definition'] == 'structured_proxy_v2'
           assert rag_metrics['query_count'] >= 20
 
           print(json.dumps({
@@ -186,3 +186,4 @@ jobs:
           path: .artifacts/
           if-no-files-found: warn
           retention-days: 14
+          include-hidden-files: true

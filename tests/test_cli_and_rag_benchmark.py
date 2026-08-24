@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from legal_risk_modeling.cli_contract import ensure_existing_csv, validate_temporal_split
-from legal_risk_modeling.rag_benchmark import evaluate_retrieval
+from legal_risk_modeling.rag_benchmark import build_structured_gold, evaluate_retrieval
 
 
 def test_missing_csv_has_clear_error(tmp_path: Path) -> None:
@@ -18,6 +18,19 @@ def test_temporal_split_contract() -> None:
     validate_temporal_split(2021, 2023, 2024, 2025, 2026)
     with pytest.raises(ValueError, match="invalid temporal split"):
         validate_temporal_split(2021, 2024, 2024, 2025, 2026)
+
+
+def test_sparse_legal_basis_falls_back_to_outcome_peers() -> None:
+    metadata = pd.DataFrame(
+        [
+            {"JID": "a", "is_reduced": 1, "legal_basis": "unique"},
+            {"JID": "b", "is_reduced": 1, "legal_basis": "252"},
+            {"JID": "c", "is_reduced": 1, "legal_basis": "252"},
+            {"JID": "d", "is_reduced": 0, "legal_basis": "252"},
+        ]
+    )
+    gold = build_structured_gold(metadata, min_basis_peers=3)
+    assert gold["a"] == {"b", "c"}
 
 
 def test_rag_benchmark_metrics() -> None:
@@ -39,6 +52,7 @@ def test_rag_benchmark_metrics() -> None:
         ]
     )
     metrics, per_query, golden = evaluate_retrieval(retrieval, metadata, k=2)
+    assert metrics["schema_version"] == 2
     assert metrics["query_count"] == 3
     assert metrics["hit_rate_at_2"] == 1.0
     assert round(metrics["mrr_at_2"], 6) == round((1.0 + 0.5 + 1.0) / 3, 6)
