@@ -85,7 +85,7 @@ def test_human_gold_requires_complete_graded_judgments_before_evaluation() -> No
     )
     assert validate_human_gold(gold)["status"] == "pass"
     metrics, per_query = evaluate_human_gold(retrieval, gold, k=2)
-    assert metrics["gold_definition"] == "human_graded_v2"
+    assert metrics["gold_definition"] == "human_graded_v1"
     assert metrics["query_count"] == 1
     assert metrics["eligible_query_count"] == 1
     assert metrics["eligibility_policy"]["min_judgments_per_query"] == 5
