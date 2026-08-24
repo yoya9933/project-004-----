@@ -256,7 +256,7 @@ def evaluate_human_gold(
     per_query_df = pd.DataFrame(per_query)
     base = {
         "schema_version": 2,
-        "gold_definition": "human_graded_v2",
+        "gold_definition": "human_graded_v1",
         "relevance_grades": [0, 1, 2, 3],
         "k": k,
         "query_count": int(len(per_query_df)),
