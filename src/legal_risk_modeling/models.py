@@ -31,7 +31,7 @@ def build_ratio_candidates(random_state: int = 42) -> dict[str, list[tuple[str, 
                 Pipeline(
                     [
                         ("scale", StandardScaler()),
-                        ("model", Lasso(alpha=alpha, max_iter=10000, random_state=random_state)),
+                        ("model", Lasso(alpha=alpha, max_iter=50000, random_state=random_state)),
                     ]
                 ),
             )
@@ -48,7 +48,7 @@ def build_ratio_candidates(random_state: int = 42) -> dict[str, list[tuple[str, 
                             ElasticNet(
                                 alpha=alpha,
                                 l1_ratio=l1_ratio,
-                                max_iter=10000,
+                                max_iter=50000,
                                 random_state=random_state,
                             ),
                         ),
@@ -131,6 +131,7 @@ def build_classification_model(l2: float = 0.01, random_state: int = 42) -> Pipe
                 LogisticRegression(
                     C=1.0 / l2,
                     solver="lbfgs",
+                    class_weight="balanced",
                     max_iter=5000,
                     random_state=random_state,
                 ),
@@ -164,6 +165,7 @@ def classification_model_spec(l2: float = 0.01) -> dict[str, Any]:
                 "estimator": "sklearn.linear_model.LogisticRegression",
                 "l2": l2,
                 "C": 1.0 / l2,
+                "class_weight": "balanced",
             },
         },
     }
