@@ -65,35 +65,73 @@ def test_rag_benchmark_metrics() -> None:
     assert len(golden) == 3
 
 
-def test_human_gold_uses_only_approved_graded_judgments_and_ndcg() -> None:
+def test_human_gold_requires_complete_graded_judgments_before_evaluation() -> None:
     retrieval = pd.DataFrame(
         [
             {"query_JID": "a", "similar_rank": 1, "similar_JID": "b"},
             {"query_JID": "a", "similar_rank": 2, "similar_JID": "c"},
+            {"query_JID": "a", "similar_rank": 3, "similar_JID": "d"},
         ]
     )
     gold = pd.DataFrame(
         [
             {"query_jid": "a", "candidate_jid": "b", "relevance_grade": 3, "reviewer": "R1", "review_status": "approved", "notes": "", "seed_source": "manual"},
             {"query_jid": "a", "candidate_jid": "c", "relevance_grade": 1, "reviewer": "R1", "review_status": "approved", "notes": "", "seed_source": "manual"},
-            {"query_jid": "a", "candidate_jid": "d", "relevance_grade": "", "reviewer": "", "review_status": "review_required", "notes": "", "seed_source": "retriever_top_n"},
+            {"query_jid": "a", "candidate_jid": "d", "relevance_grade": 0, "reviewer": "R1", "review_status": "approved", "notes": "", "seed_source": "manual"},
+            {"query_jid": "a", "candidate_jid": "e", "relevance_grade": 0, "reviewer": "R1", "review_status": "approved", "notes": "", "seed_source": "manual"},
+            {"query_jid": "a", "candidate_jid": "f", "relevance_grade": 0, "reviewer": "R1", "review_status": "approved", "notes": "", "seed_source": "manual"},
         ],
         columns=HUMAN_GOLD_COLUMNS,
     )
     assert validate_human_gold(gold)["status"] == "pass"
     metrics, per_query = evaluate_human_gold(retrieval, gold, k=2)
-    assert metrics["gold_definition"] == "human_graded_v1"
+    assert metrics["gold_definition"] == "human_graded_v2"
     assert metrics["query_count"] == 1
+    assert metrics["eligible_query_count"] == 1
+    assert metrics["eligibility_policy"]["min_judgments_per_query"] == 5
     assert metrics["ndcg_at_2"] == 1.0
     assert len(per_query) == 1
 
 
-def test_review_queue_does_not_fabricate_human_labels() -> None:
+def test_human_gold_excludes_incomplete_or_all_irrelevant_queries() -> None:
     retrieval = pd.DataFrame(
         [{"query_JID": "a", "similar_rank": 1, "similar_JID": "b"}]
+    )
+    rows = [
+        {"query_jid": "a", "candidate_jid": candidate, "relevance_grade": 0, "reviewer": "R1", "review_status": "approved", "notes": "", "seed_source": "manual"}
+        for candidate in ["b", "c", "d", "e", "f"]
+    ]
+    gold = pd.DataFrame(rows, columns=HUMAN_GOLD_COLUMNS)
+    metrics, per_query = evaluate_human_gold(retrieval, gold, k=1)
+    assert metrics["approved_query_count"] == 1
+    assert metrics["eligible_query_count"] == 0
+    assert metrics["query_count"] == 0
+    assert metrics["status"] == "insufficient_reviewed_queries"
+    assert per_query.empty
+
+
+def test_review_queue_does_not_fabricate_human_labels_and_includes_context() -> None:
+    retrieval = pd.DataFrame(
+        [
+            {
+                "query_JID": "a",
+                "query_title": "Query title",
+                "similar_rank": 1,
+                "similar_JID": "b",
+                "similarity_score": 0.9,
+                "similar_decision_year": 2025,
+                "similar_court": "Court",
+                "similar_title": "Candidate title",
+                "similar_reduction_snippet": "Reduction evidence",
+                "similar_delay_snippet": "Delay evidence",
+            }
+        ]
     )
     queue = seed_review_queue(retrieval, pd.DataFrame(columns=HUMAN_GOLD_COLUMNS), top_n=5)
     assert len(queue) == 1
     assert queue.iloc[0]["review_status"] == "review_required"
     assert str(queue.iloc[0]["reviewer"]) == ""
     assert str(queue.iloc[0]["relevance_grade"]) == ""
+    assert queue.iloc[0]["query_title"] == "Query title"
+    assert queue.iloc[0]["candidate_title"] == "Candidate title"
+    assert queue.iloc[0]["candidate_reduction_snippet"] == "Reduction evidence"
