@@ -3,8 +3,13 @@ from __future__ import annotations
 from typing import Any
 
 from sklearn.dummy import DummyRegressor
-from sklearn.ensemble import ExtraTreesRegressor, GradientBoostingRegressor, HistGradientBoostingRegressor, RandomForestRegressor
-from sklearn.linear_model import ElasticNet, Lasso, Ridge
+from sklearn.ensemble import (
+    ExtraTreesRegressor,
+    GradientBoostingRegressor,
+    HistGradientBoostingRegressor,
+    RandomForestRegressor,
+)
+from sklearn.linear_model import ElasticNet, Lasso, LogisticRegression, Ridge
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
@@ -114,6 +119,26 @@ def build_ratio_candidates(random_state: int = 42) -> dict[str, list[tuple[str, 
     }
 
 
+def build_classification_model(l2: float = 0.01, random_state: int = 42) -> Pipeline:
+    """Single governed classifier definition shared by all classification entrypoints."""
+    if l2 <= 0:
+        raise ValueError("l2 must be positive")
+    return Pipeline(
+        [
+            ("scale", StandardScaler()),
+            (
+                "model",
+                LogisticRegression(
+                    C=1.0 / l2,
+                    solver="lbfgs",
+                    max_iter=5000,
+                    random_state=random_state,
+                ),
+            ),
+        ]
+    )
+
+
 def model_spec() -> dict[str, Any]:
     return {
         "target": "remaining_ratio",
@@ -122,5 +147,23 @@ def model_spec() -> dict[str, Any]:
         "families": {
             name: [candidate_name for candidate_name, _ in candidates]
             for name, candidates in build_ratio_candidates().items()
+        },
+    }
+
+
+def classification_model_spec(l2: float = 0.01) -> dict[str, Any]:
+    return {
+        "target": "is_reduced",
+        "threshold": 0.5,
+        "features": "legal_risk_modeling.features.FEATURE_NAMES",
+        "models": {
+            "majority_baseline": {"type": "training_prevalence"},
+            "keyword_rule_baseline": {"type": "deterministic_rule"},
+            "logistic_regression_l2": {
+                "type": "sklearn.pipeline.Pipeline",
+                "estimator": "sklearn.linear_model.LogisticRegression",
+                "l2": l2,
+                "C": 1.0 / l2,
+            },
         },
     }
