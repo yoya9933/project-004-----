@@ -7,13 +7,9 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from .paths import resolve_ratio_release_dir
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-RELEASE_DIR = PROJECT_ROOT / "06_交付物" / "reduction_ratio_model_expanded_824_sklearn"
-RELEASE_PATH = RELEASE_DIR / "approved_release.json"
-PROMOTION_PATH = RELEASE_DIR / "promotion_report.json"
-MANIFEST_PATH = RELEASE_DIR / "manifest.json"
-METRICS_PATH = RELEASE_DIR / "metrics.csv"
-PREDICTIONS_PATH = RELEASE_DIR / "predictions.csv"
 
 MODEL_LABELS = {
     "mean_baseline": "Mean baseline",
@@ -42,7 +38,14 @@ def load_csv(path: str) -> pd.DataFrame:
 
 
 def load_release_bundle() -> dict[str, Any]:
-    required = [RELEASE_PATH, PROMOTION_PATH, METRICS_PATH, PREDICTIONS_PATH]
+    release_dir = resolve_ratio_release_dir(PROJECT_ROOT)
+    release_path = release_dir / "approved_release.json"
+    promotion_path = release_dir / "promotion_report.json"
+    manifest_path = release_dir / "manifest.json"
+    metrics_path = release_dir / "metrics.csv"
+    predictions_path = release_dir / "predictions.csv"
+
+    required = [release_path, promotion_path, metrics_path, predictions_path]
     missing = [path for path in required if not path.exists()]
     if missing:
         joined = ", ".join(str(path.relative_to(PROJECT_ROOT)) for path in missing)
@@ -51,11 +54,11 @@ def load_release_bundle() -> dict[str, Any]:
             f"{joined}. Run 04_執行稿/run_reduction_ratio_model_sklearn.py offline first."
         )
 
-    release = load_json(str(RELEASE_PATH))
-    promotion = load_json(str(PROMOTION_PATH))
-    metrics = load_csv(str(METRICS_PATH))
-    predictions = load_csv(str(PREDICTIONS_PATH))
-    manifest = load_json(str(MANIFEST_PATH)) if MANIFEST_PATH.exists() else None
+    release = load_json(str(release_path))
+    promotion = load_json(str(promotion_path))
+    metrics = load_csv(str(metrics_path))
+    predictions = load_csv(str(predictions_path))
+    manifest = load_json(str(manifest_path)) if manifest_path.exists() else None
 
     baseline = str(release.get("baseline") or "mean_baseline")
     approved = [str(model) for model in release.get("approved_models", [])]
@@ -83,6 +86,7 @@ def load_release_bundle() -> dict[str, Any]:
         "metrics": metrics,
         "predictions": predictions,
         "manifest": manifest,
+        "release_dir": release_dir,
         "allowed_models": allowed_models,
         "default_model": default_model,
     }
@@ -106,7 +110,7 @@ def render_governance_status(bundle: dict[str, Any]) -> None:
 
     if manifest is None:
         st.warning(
-            "目前這批 checked-in artifacts 尚無 manifest。重新執行 governed offline training 後，"
+            "目前這批 legacy artifacts 尚無 manifest。重新執行 governed offline training 後，"
             "每次 run 會記錄 Git SHA、資料 SHA256、artifact SHA256、Python/platform 與 package versions。"
         )
     else:

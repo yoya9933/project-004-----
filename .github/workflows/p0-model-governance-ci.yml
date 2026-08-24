@@ -15,7 +15,7 @@ permissions:
 jobs:
   full-test:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -39,23 +39,46 @@ jobs:
           ruff check src/legal_risk_modeling streamlit_app.py \
             04_執行稿/run_reduction_ratio_model_sklearn.py \
             04_執行稿/run_reduction_ratio_model_fast.py \
-            04_執行稿/run_is_reduced_classification.py tests
+            04_執行稿/run_is_reduced_classification.py \
+            04_執行稿/run_rag_retrieval_benchmark.py tests
 
       - name: Compile Python sources
         run: |
           python -m compileall -q src streamlit_app.py \
             04_執行稿/run_reduction_ratio_model_sklearn.py \
             04_執行稿/run_reduction_ratio_model_fast.py \
-            04_執行稿/run_is_reduced_classification.py
+            04_執行稿/run_is_reduced_classification.py \
+            04_執行稿/run_rag_retrieval_benchmark.py
 
       - name: Unit and UI tests
         run: python -m pytest -q
+
+      - name: Verify generated artifact boundary
+        run: |
+          git check-ignore -q .artifacts/
+          test -z "$(git ls-files '.artifacts/**')"
+          test -z "$(git ls-files '.streamlit_demo_*.log')"
+
+      - name: Build active AI and RAG annotation artifacts
+        run: |
+          python 04_執行稿/build_ai_rag_annotation_pack.py \
+            --output-dir .artifacts/ai_rag_annotation
+
+      - name: Run RAG retrieval benchmark
+        run: |
+          python 04_執行稿/run_rag_retrieval_benchmark.py \
+            --retrieval-csv .artifacts/ai_rag_annotation/rag_similar_cases.csv \
+            --metadata-csv .artifacts/ai_rag_annotation/annotation_workbook.csv \
+            --min-queries 20
 
       - name: Run governed ratio training
         run: python 04_執行稿/run_reduction_ratio_model_sklearn.py --run-id "ci-ratio-${GITHUB_SHA}"
 
       - name: Run governed classification pipeline
-        run: python 04_執行稿/run_is_reduced_classification.py --run-id "ci-classification-${GITHUB_SHA}"
+        run: |
+          python 04_執行稿/run_is_reduced_classification.py \
+            --input-csv .artifacts/ai_rag_annotation/annotation_workbook.csv \
+            --run-id "ci-classification-${GITHUB_SHA}"
 
       - name: Validate manifests and governed release
         run: |
@@ -67,8 +90,11 @@ jobs:
 
           root = Path.cwd()
           git_sha = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          artifact_root = root / '.artifacts'
+          ratio = artifact_root / 'reduction_ratio_model_expanded_824_sklearn'
+          classification = artifact_root / 'is_reduced_classification'
+          rag = artifact_root / 'rag_benchmark'
 
-          ratio = root / '06_交付物' / 'reduction_ratio_model_expanded_824_sklearn'
           required_ratio = [
               ratio / 'metrics.csv',
               ratio / 'predictions.csv',
@@ -78,8 +104,17 @@ jobs:
               ratio / 'approved_release.json',
               ratio / 'manifest.json',
           ]
-          missing = [str(p.relative_to(root)) for p in required_ratio if not p.exists()]
-          assert not missing, f'missing ratio artifacts: {missing}'
+          required_rag = [
+              rag / 'metrics.json',
+              rag / 'per_query.csv',
+              rag / 'golden_queries.csv',
+          ]
+          missing = [
+              str(path.relative_to(root))
+              for path in [*required_ratio, *required_rag, classification / 'manifest.json']
+              if not path.exists()
+          ]
+          assert not missing, f'missing governed artifacts: {missing}'
 
           release = json.loads((ratio / 'approved_release.json').read_text(encoding='utf-8'))
           promotion = json.loads((ratio / 'promotion_report.json').read_text(encoding='utf-8'))
@@ -87,12 +122,8 @@ jobs:
           assert release['approved_models'] == promotion['approved_models']
           assert release['default_model'] in [release['baseline'], *release['approved_models']]
 
-          manifests = [
-              ratio / 'manifest.json',
-              root / '06_交付物' / 'is_reduced_classification' / 'manifest.json',
-          ]
+          manifests = [ratio / 'manifest.json', classification / 'manifest.json']
           for manifest_path in manifests:
-              assert manifest_path.exists(), manifest_path
               manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
               assert manifest.get('git_sha') == git_sha, (manifest_path, manifest.get('git_sha'), git_sha)
               assert manifest.get('datasets'), f'{manifest_path}: datasets missing'
@@ -105,13 +136,17 @@ jobs:
                   digest = hashlib.sha256(path.read_bytes()).hexdigest()
                   assert item['sha256'] == digest, item['path']
 
-          status_path = root / '06_交付物' / 'is_reduced_classification' / 'model_status.json'
-          status = json.loads(status_path.read_text(encoding='utf-8'))
+          status = json.loads((classification / 'model_status.json').read_text(encoding='utf-8'))
           assert status['status'] in {'trained', 'skipped'}
+          rag_metrics = json.loads((rag / 'metrics.json').read_text(encoding='utf-8'))
+          assert rag_metrics['gold_definition'] == 'structured_proxy_v1'
+          assert rag_metrics['query_count'] >= 20
+
           print(json.dumps({
               'ratio_default': release['default_model'],
               'ratio_approved': release['approved_models'],
               'classification_status': status['status'],
+              'rag': rag_metrics,
               'git_sha': git_sha,
           }, ensure_ascii=False, indent=2))
           PY
@@ -142,3 +177,12 @@ jobs:
 
           cat /tmp/streamlit.log
           exit 1
+
+      - name: Retain governed artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: governed-artifacts-${{ github.sha }}
+          path: .artifacts/
+          if-no-files-found: warn
+          retention-days: 14

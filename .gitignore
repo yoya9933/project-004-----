@@ -1,33 +1,15 @@
-# Local editor settings
-.vscode/
+# Windows Explorer metadata
+Thumbs.db
+**/Thumbs.db
 
-# Python caches and local environments
-__pycache__/
-*.py[cod]
-*$py.class
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.venv/
-venv/
+# Windows known-folder definition
+Desktop.ini
+**/Desktop.ini
 
-# uv local caches
-.uv-cache/
-.uv-python/
+# macOS Finder metadata
+.DS_Store
+**/.DS_Store
 
-# Local secrets
-.env
-.env.*
-!.env.example
-
-# Archives and generated duplicate outputs
-*.zip
-*.7z
-*.rar
-*.tar
-*.tar.gz
-*.tgz
-02_輸入資料/法律課程資料庫-20260707T080337Z-3-001/
-02_輸入資料/json_output/
-02_輸入資料/pdf_output/
-05_測試與驗證/json_output_test/
+# Rebuildable local/CI outputs
+.artifacts/
+*.log

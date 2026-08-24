@@ -14,9 +14,11 @@ SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
+from legal_risk_modeling.cli_contract import ensure_existing_csv  # noqa: E402
 from legal_risk_modeling.features import FEATURE_NAMES, normalize_feature_frame  # noqa: E402
 from legal_risk_modeling.manifest import build_manifest, write_manifest  # noqa: E402
 from legal_risk_modeling.models import build_ratio_candidates, model_spec  # noqa: E402
+from legal_risk_modeling.paths import ratio_output_dir  # noqa: E402
 from legal_risk_modeling.promotion import build_promotion_report  # noqa: E402
 
 
@@ -137,7 +139,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--output-dir",
         type=Path,
-        default=PROJECT_ROOT / "06_交付物" / "reduction_ratio_model_expanded_824_sklearn",
+        default=ratio_output_dir(PROJECT_ROOT),
     )
     parser.add_argument("--random-state", type=int, default=42)
     parser.add_argument("--run-id", default="ratio-model-governed")
@@ -146,7 +148,9 @@ def parse_args() -> argparse.Namespace:
 
 def main() -> None:
     args = parse_args()
-    df = pd.read_csv(args.usable_frame)
+    usable_frame = ensure_existing_csv(args.usable_frame)
+    model_frame = ensure_existing_csv(args.model_frame) if args.model_frame.exists() else None
+    df = pd.read_csv(usable_frame)
     if "target_quality" in df.columns:
         df = df[df["target_quality"] == "ok"].copy()
     df["decision_year"] = pd.to_numeric(df["decision_year"], errors="raise").astype(int)
@@ -208,9 +212,10 @@ def main() -> None:
     }
     release_path.write_text(json.dumps(release, ensure_ascii=False, indent=2), encoding="utf-8")
 
+    dataset_paths = [usable_frame, model_frame] if model_frame is not None else [usable_frame]
     manifest = build_manifest(
         project_root=PROJECT_ROOT,
-        dataset_paths=[args.usable_frame, args.model_frame] if args.model_frame.exists() else [args.usable_frame],
+        dataset_paths=dataset_paths,
         artifact_paths=[metrics_path, predictions_path, selected_path, search_path, promotion_path, release_path],
         model_spec=model_spec(),
         run_id=args.run_id,
