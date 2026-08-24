@@ -69,7 +69,9 @@ jobs:
           python 04_執行稿/run_rag_retrieval_benchmark.py \
             --retrieval-csv .artifacts/ai_rag_annotation/rag_similar_cases.csv \
             --metadata-csv 06_交付物/ai_rag_annotation/annotation_workbook.csv \
-            --min-queries 20
+            --min-queries 20 \
+            --min-hit-rate 0.40 \
+            --min-mrr 0.28
 
       - name: Run governed ratio training
         run: python 04_執行稿/run_reduction_ratio_model_sklearn.py --run-id "ci-ratio-${GITHUB_SHA}"
@@ -141,6 +143,8 @@ jobs:
           rag_metrics = json.loads((rag / 'metrics.json').read_text(encoding='utf-8'))
           assert rag_metrics['gold_definition'] == 'structured_proxy_v2'
           assert rag_metrics['query_count'] >= 20
+          assert rag_metrics['hit_rate_at_3'] >= 0.40
+          assert rag_metrics['mrr_at_3'] >= 0.28
 
           print(json.dumps({
               'ratio_default': release['default_model'],
