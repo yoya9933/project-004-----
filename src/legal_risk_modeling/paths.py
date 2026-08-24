@@ -34,6 +34,13 @@ def rag_human_gold_output_dir(project_root: Path) -> Path:
     return artifact_root(project_root) / "rag_human_gold"
 
 
+def _display_path(path: Path, project_root: Path) -> str:
+    try:
+        return path.relative_to(project_root).as_posix()
+    except ValueError:
+        return str(path)
+
+
 def resolve_ratio_release_dir(project_root: Path) -> Path:
     release_dir = ratio_output_dir(project_root)
     required = [
@@ -43,7 +50,7 @@ def resolve_ratio_release_dir(project_root: Path) -> Path:
     ]
     missing = [path for path in required if not path.is_file()]
     if missing:
-        joined = ", ".join(path.relative_to(project_root).as_posix() for path in missing)
+        joined = ", ".join(_display_path(path, project_root) for path in missing)
         raise FileNotFoundError(
             "Governed release is unavailable; legacy artifacts are not permitted. Missing: "
             + joined
