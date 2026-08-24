@@ -5,6 +5,28 @@ from typing import Any, Mapping
 
 import pandas as pd
 
+from .temporal import TemporalSplitPolicy
+
+_DEFAULT_TEMPORAL_POLICY = TemporalSplitPolicy()
+SPLITS = {
+    _DEFAULT_TEMPORAL_POLICY.train_name: (
+        _DEFAULT_TEMPORAL_POLICY.train_start_year,
+        _DEFAULT_TEMPORAL_POLICY.train_end_year,
+    ),
+    _DEFAULT_TEMPORAL_POLICY.validation_name: (
+        _DEFAULT_TEMPORAL_POLICY.validation_year,
+        _DEFAULT_TEMPORAL_POLICY.validation_year,
+    ),
+    _DEFAULT_TEMPORAL_POLICY.test_name: (
+        _DEFAULT_TEMPORAL_POLICY.test_year,
+        _DEFAULT_TEMPORAL_POLICY.test_year,
+    ),
+    _DEFAULT_TEMPORAL_POLICY.latest_name: (
+        _DEFAULT_TEMPORAL_POLICY.latest_check_year,
+        _DEFAULT_TEMPORAL_POLICY.latest_check_year,
+    ),
+}
+
 FEATURE_NAMES = [
     "x_log_contract_price",
     "x_log_claimed_penalty",
@@ -35,13 +57,6 @@ ISSUE_FIELDS = [
     "partial_completion",
     "used_by_owner",
 ]
-
-SPLITS = {
-    "train_2021_2023": (2021, 2023),
-    "validation_2024": (2024, 2024),
-    "test_2025": (2025, 2025),
-    "latest_2026": (2026, 2026),
-}
 
 
 def _to_float(value: Any) -> float | None:
@@ -129,8 +144,5 @@ def normalize_feature_frame(frame: pd.DataFrame) -> pd.DataFrame:
 
 
 def case_splits(frame: pd.DataFrame) -> list[tuple[str, pd.DataFrame]]:
-    year = pd.to_numeric(frame["decision_year"], errors="coerce")
-    return [
-        (name, frame[(year >= start) & (year <= end)].copy())
-        for name, (start, end) in SPLITS.items()
-    ]
+    """Backward-compatible split helper delegated to the temporal SSOT."""
+    return TemporalSplitPolicy().split_frame(frame)

@@ -6,7 +6,12 @@ import pandas as pd
 import pytest
 
 from legal_risk_modeling.cli_contract import ensure_existing_csv, validate_temporal_split
-from legal_risk_modeling.rag_benchmark import build_structured_gold, evaluate_retrieval
+from legal_risk_modeling.rag_benchmark import (
+    build_structured_gold,
+    evaluate_human_gold,
+    evaluate_retrieval,
+)
+from legal_risk_modeling.rag_human_gold import HUMAN_GOLD_COLUMNS, seed_review_queue, validate_human_gold
 
 
 def test_missing_csv_has_clear_error(tmp_path: Path) -> None:
@@ -58,3 +63,37 @@ def test_rag_benchmark_metrics() -> None:
     assert round(metrics["mrr_at_2"], 6) == round((1.0 + 0.5 + 1.0) / 3, 6)
     assert len(per_query) == 3
     assert len(golden) == 3
+
+
+def test_human_gold_uses_only_approved_graded_judgments_and_ndcg() -> None:
+    retrieval = pd.DataFrame(
+        [
+            {"query_JID": "a", "similar_rank": 1, "similar_JID": "b"},
+            {"query_JID": "a", "similar_rank": 2, "similar_JID": "c"},
+        ]
+    )
+    gold = pd.DataFrame(
+        [
+            {"query_jid": "a", "candidate_jid": "b", "relevance_grade": 3, "reviewer": "R1", "review_status": "approved", "notes": "", "seed_source": "manual"},
+            {"query_jid": "a", "candidate_jid": "c", "relevance_grade": 1, "reviewer": "R1", "review_status": "approved", "notes": "", "seed_source": "manual"},
+            {"query_jid": "a", "candidate_jid": "d", "relevance_grade": "", "reviewer": "", "review_status": "review_required", "notes": "", "seed_source": "retriever_top_n"},
+        ],
+        columns=HUMAN_GOLD_COLUMNS,
+    )
+    assert validate_human_gold(gold)["status"] == "pass"
+    metrics, per_query = evaluate_human_gold(retrieval, gold, k=2)
+    assert metrics["gold_definition"] == "human_graded_v1"
+    assert metrics["query_count"] == 1
+    assert metrics["ndcg_at_2"] == 1.0
+    assert len(per_query) == 1
+
+
+def test_review_queue_does_not_fabricate_human_labels() -> None:
+    retrieval = pd.DataFrame(
+        [{"query_JID": "a", "similar_rank": 1, "similar_JID": "b"}]
+    )
+    queue = seed_review_queue(retrieval, pd.DataFrame(columns=HUMAN_GOLD_COLUMNS), top_n=5)
+    assert len(queue) == 1
+    assert queue.iloc[0]["review_status"] == "review_required"
+    assert str(queue.iloc[0]["reviewer"]) == ""
+    assert str(queue.iloc[0]["relevance_grade"]) == ""

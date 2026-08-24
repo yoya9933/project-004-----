@@ -13,6 +13,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from legal_risk_modeling.classification import prepare_classification_frame, run_classification
 from legal_risk_modeling.features import FEATURE_NAMES
+from legal_risk_modeling.manifest import validate_manifest
 from legal_risk_modeling.models import build_classification_model
 
 
@@ -49,7 +50,7 @@ def test_classification_uses_shared_feature_contract() -> None:
     assert model.predict_proba(train[FEATURE_NAMES]).shape == (12, 2)
 
 
-def test_classification_run_writes_traceable_manifest(tmp_path: Path) -> None:
+def test_classification_run_writes_governed_release_and_manifest_v2(tmp_path: Path) -> None:
     input_dir = tmp_path / "input"
     output_dir = tmp_path / "output"
     input_dir.mkdir()
@@ -64,9 +65,15 @@ def test_classification_run_writes_traceable_manifest(tmp_path: Path) -> None:
         run_id="test-classification",
     )
     assert result["status"] == "trained"
-    assert (output_dir / "metrics.csv").exists()
-    manifest = json.loads((output_dir / "manifest.json").read_text(encoding="utf-8"))
+    assert result["promotion_status"] in {"approved", "rejected"}
+    assert (output_dir / "promotion_report.json").exists()
+    release = json.loads((output_dir / "approved_release.json").read_text(encoding="utf-8"))
+    assert release["status"] == "approved"
+    assert release["default_model"] in {"majority_baseline", "logistic_regression_l2"}
+    manifest = validate_manifest(project_root=tmp_path, manifest_path=output_dir / "manifest.json")
+    assert manifest["schema_version"] == 2
     assert manifest["run_id"] == "test-classification"
     assert manifest["datasets"][0]["sha256"]
     assert manifest["artifacts"]
     assert manifest["model_spec"]["target"] == "is_reduced"
+    assert manifest["temporal_split_policy"]["validation_year"] == 2024

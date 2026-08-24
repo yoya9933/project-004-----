@@ -6,6 +6,9 @@ from typing import Any
 
 import pandas as pd
 
+from .features import FEATURE_NAMES
+from .temporal import TemporalSplitPolicy
+
 REQUIRED_ANNOTATION_COLUMNS = ("JID", "decision_year", "is_reduced")
 NONNEGATIVE_NUMERIC_COLUMNS = (
     "contract_price",
@@ -158,6 +161,165 @@ def validate_annotation_frame(
             "numeric_columns": numeric_stats,
         },
     }
+
+
+def _validate_model_frame(
+    frame: pd.DataFrame,
+    *,
+    profile: str,
+    target_column: str,
+    policy: TemporalSplitPolicy,
+    binary_target: bool,
+    target_range: tuple[float, float] | None,
+    max_feature_missing_rate: float,
+    min_split_rows: dict[str, int],
+) -> dict[str, Any]:
+    errors: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
+    required = ["JID", "decision_year", target_column, *FEATURE_NAMES]
+    missing = [column for column in required if column not in frame.columns]
+    if missing:
+        return {
+            "schema_version": 2,
+            "profile": profile,
+            "status": "fail",
+            "row_count": int(len(frame)),
+            "errors": [{"code": "missing_required_columns", "columns": missing}],
+            "warnings": [],
+            "stats": {},
+        }
+
+    work = frame.copy()
+    jid = work["JID"].astype("string").fillna("").str.strip()
+    if jid.eq("").any():
+        errors.append({"code": "blank_jid", "count": int(jid.eq("").sum())})
+    duplicate = jid.ne("") & jid.duplicated(keep=False)
+    if duplicate.any():
+        errors.append({"code": "duplicate_jid", "count": int(duplicate.sum())})
+
+    years = pd.to_numeric(work["decision_year"], errors="coerce")
+    if years.isna().any():
+        errors.append({"code": "invalid_decision_year", "count": int(years.isna().sum())})
+    work["decision_year"] = years
+
+    target = pd.to_numeric(work[target_column], errors="coerce")
+    invalid_target = (~work[target_column].map(_blank)) & target.isna()
+    if invalid_target.any():
+        errors.append({"code": "invalid_target", "count": int(invalid_target.sum())})
+    missing_target = target.isna()
+    if missing_target.any():
+        errors.append({"code": "missing_target", "count": int(missing_target.sum())})
+    if binary_target:
+        invalid_binary = target.notna() & ~target.isin([0.0, 1.0])
+        if invalid_binary.any():
+            errors.append({"code": "invalid_binary_target", "count": int(invalid_binary.sum())})
+    if target_range is not None:
+        low, high = target_range
+        out_of_range = target.notna() & ((target < low) | (target > high))
+        if out_of_range.any():
+            errors.append(
+                {
+                    "code": "target_out_of_range",
+                    "count": int(out_of_range.sum()),
+                    "minimum": low,
+                    "maximum": high,
+                }
+            )
+
+    feature_stats: dict[str, Any] = {}
+    for feature in FEATURE_NAMES:
+        numeric = pd.to_numeric(work[feature], errors="coerce")
+        missing_rate = float(numeric.isna().mean()) if len(work) else 1.0
+        feature_stats[feature] = {"missing_rate": round(missing_rate, 6)}
+        if missing_rate > max_feature_missing_rate:
+            errors.append(
+                {
+                    "code": "feature_missing_rate_too_high",
+                    "column": feature,
+                    "actual": round(missing_rate, 6),
+                    "maximum": max_feature_missing_rate,
+                }
+            )
+
+    split_stats: dict[str, Any] = {}
+    split_map = dict(policy.split_frame(work))
+    requirements = {
+        policy.train_name: min_split_rows.get("train", 10),
+        policy.validation_name: min_split_rows.get("validation", 3),
+        policy.test_name: min_split_rows.get("test", 3),
+        policy.latest_name: min_split_rows.get("latest", 1),
+    }
+    for split_name, minimum in requirements.items():
+        split = split_map[split_name]
+        split_stats[split_name] = {"rows": int(len(split)), "minimum": int(minimum)}
+        if len(split) < minimum:
+            errors.append(
+                {
+                    "code": "split_too_small",
+                    "split": split_name,
+                    "actual": int(len(split)),
+                    "minimum": int(minimum),
+                }
+            )
+
+    train = split_map[policy.train_name]
+    if binary_target and not train.empty:
+        train_target = pd.to_numeric(train[target_column], errors="coerce").dropna().astype(int)
+        counts = {str(key): int(value) for key, value in train_target.value_counts().sort_index().items()}
+        split_stats[policy.train_name]["class_counts"] = counts
+        if train_target.nunique() < 2:
+            errors.append({"code": "training_target_single_class", "class_counts": counts})
+
+    return {
+        "schema_version": 2,
+        "profile": profile,
+        "status": "fail" if errors else "pass",
+        "row_count": int(len(work)),
+        "errors": errors,
+        "warnings": warnings,
+        "stats": {
+            "feature_missing": feature_stats,
+            "splits": split_stats,
+            "target_non_null": int(target.notna().sum()),
+        },
+        "temporal_split_policy": policy.as_dict(),
+    }
+
+
+def validate_classification_model_frame(
+    frame: pd.DataFrame,
+    *,
+    policy: TemporalSplitPolicy | None = None,
+    max_feature_missing_rate: float = 0.25,
+) -> dict[str, Any]:
+    return _validate_model_frame(
+        frame,
+        profile="classification_model_frame",
+        target_column="is_reduced_label",
+        policy=policy or TemporalSplitPolicy(),
+        binary_target=True,
+        target_range=(0.0, 1.0),
+        max_feature_missing_rate=max_feature_missing_rate,
+        min_split_rows={"train": 10, "validation": 3, "test": 3, "latest": 1},
+    )
+
+
+def validate_ratio_model_frame(
+    frame: pd.DataFrame,
+    *,
+    policy: TemporalSplitPolicy | None = None,
+    max_feature_missing_rate: float = 0.25,
+) -> dict[str, Any]:
+    return _validate_model_frame(
+        frame,
+        profile="ratio_model_frame",
+        target_column="remaining_ratio",
+        policy=policy or TemporalSplitPolicy(),
+        binary_target=False,
+        target_range=(0.0, 1.0),
+        max_feature_missing_rate=max_feature_missing_rate,
+        min_split_rows={"train": 10, "validation": 3, "test": 3, "latest": 1},
+    )
 
 
 def validate_annotation_csv(

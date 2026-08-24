@@ -27,11 +27,7 @@ def parse_args() -> argparse.Namespace:
         type=Path,
         default=PROJECT_ROOT / "06_交付物" / "ai_rag_annotation" / "annotation_workbook.csv",
     )
-    parser.add_argument(
-        "--output-dir",
-        type=Path,
-        default=classification_output_dir(PROJECT_ROOT),
-    )
+    parser.add_argument("--output-dir", type=Path, default=classification_output_dir(PROJECT_ROOT))
     parser.add_argument("--min-labeled-rows", type=positive_int, default=30)
     parser.add_argument("--l2", type=non_negative_float, default=0.01)
     parser.add_argument("--random-state", type=int, default=42)
@@ -69,6 +65,7 @@ def main() -> None:
         latest_check_year=args.latest_check_year,
         use_derived_label_from_amounts=args.use_derived_label_from_amounts,
         run_id=args.run_id,
+        strict_git=True,
     )
     print(json.dumps(result, ensure_ascii=False))
 

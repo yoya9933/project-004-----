@@ -10,6 +10,13 @@ Desktop.ini
 .DS_Store
 **/.DS_Store
 
+# Python build/test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
 # Rebuildable local/CI outputs
 .artifacts/
 *.log

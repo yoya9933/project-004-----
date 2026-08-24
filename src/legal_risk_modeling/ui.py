@@ -7,6 +7,7 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from .manifest import validate_manifest
 from .paths import resolve_ratio_release_dir
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -45,8 +46,8 @@ def load_release_bundle() -> dict[str, Any]:
     metrics_path = release_dir / "metrics.csv"
     predictions_path = release_dir / "predictions.csv"
 
-    required = [release_path, promotion_path, metrics_path, predictions_path]
-    missing = [path for path in required if not path.exists()]
+    required = [release_path, promotion_path, manifest_path, metrics_path, predictions_path]
+    missing = [path for path in required if not path.is_file()]
     if missing:
         joined = ", ".join(str(path.relative_to(PROJECT_ROOT)) for path in missing)
         raise FileNotFoundError(
@@ -54,21 +55,27 @@ def load_release_bundle() -> dict[str, Any]:
             f"{joined}. Run 04_執行稿/run_reduction_ratio_model_sklearn.py offline first."
         )
 
+    manifest = validate_manifest(project_root=PROJECT_ROOT, manifest_path=manifest_path)
     release = load_json(str(release_path))
     promotion = load_json(str(promotion_path))
     metrics = load_csv(str(metrics_path))
     predictions = load_csv(str(predictions_path))
-    manifest = load_json(str(manifest_path)) if manifest_path.exists() else None
 
     baseline = str(release.get("baseline") or "mean_baseline")
     approved = [str(model) for model in release.get("approved_models", [])]
     allowed_models = list(dict.fromkeys([baseline, *approved]))
     default_model = str(release.get("default_model") or baseline)
 
+    if release.get("status") != "approved":
+        raise ValueError("approved_release.json must have status='approved'")
     if default_model not in allowed_models:
         raise ValueError(
             f"approved_release.json is invalid: default_model={default_model!r} is not approved"
         )
+    if promotion.get("default_model") != default_model:
+        raise ValueError("release and promotion report disagree on default_model")
+    if promotion.get("approved_models", []) != release.get("approved_models", []):
+        raise ValueError("release and promotion report disagree on approved_models")
 
     metric_models = set(metrics["model"].astype(str))
     prediction_models = set(predictions["model"].astype(str))
@@ -108,19 +115,16 @@ def render_governance_status(bundle: dict[str, Any]) -> None:
     else:
         st.success("UI 只允許 baseline 與已通過 promotion gate 的模型。")
 
-    if manifest is None:
-        st.warning(
-            "目前這批 legacy artifacts 尚無 manifest。重新執行 governed offline training 後，"
-            "每次 run 會記錄 Git SHA、資料 SHA256、artifact SHA256、Python/platform 與 package versions。"
-        )
-    else:
-        with st.expander("Run manifest", expanded=False):
-            st.write(f"Run ID: `{manifest.get('run_id', '—')}`")
-            st.write(f"Git SHA: `{manifest.get('git_sha') or 'unavailable'}`")
-            st.write(f"Created UTC: `{manifest.get('created_at_utc', '—')}`")
-            st.write(f"Dataset files: {len(manifest.get('datasets', []))}")
-            st.write(f"Tracked packages: {len(manifest.get('packages', {}))}")
-            st.json(manifest, expanded=False)
+    git = manifest.get("git") or {}
+    runtime = manifest.get("runtime") or {}
+    with st.expander("Run manifest", expanded=False):
+        st.write(f"Run ID: `{manifest.get('run_id', '—')}`")
+        st.write(f"Git SHA: `{git.get('sha') or 'unavailable'}`")
+        st.write(f"Git dirty: `{git.get('dirty')}`")
+        st.write(f"Created UTC: `{manifest.get('created_at_utc', '—')}`")
+        st.write(f"Dataset files: {len(manifest.get('datasets', []))}")
+        st.write(f"Tracked packages: {len(runtime.get('packages', {}))}")
+        st.json(manifest, expanded=False)
 
 
 def render_promotion_table(bundle: dict[str, Any]) -> None:
@@ -153,8 +157,8 @@ def render_metrics(bundle: dict[str, Any], selected_model: str) -> None:
     selected["model"] = selected["model"].astype(str).map(model_label)
     st.subheader("Backtest metrics")
     st.caption(
-        "2021–2023 為 train；2024 validation；2025 test；2026 latest check。"
-        "Learned model 未通過 gate 時不會成為 UI default。"
+        "Hyperparameter tuning 僅使用 training period 內的 rolling CV；"
+        "validation/test/latest 保留給 promotion 與監控。"
     )
     st.dataframe(selected, use_container_width=True, hide_index=True)
 
@@ -215,7 +219,7 @@ def main() -> None:
     st.title("工程違約金風險模型")
     st.caption(
         "此 App 不訓練模型。所有模型與 predictions 必須先經離線 pipeline、promotion gate，"
-        "再由 approved_release.json 允許 UI 載入。"
+        "再由 approved_release.json + manifest integrity validation 允許 UI 載入。"
     )
 
     try:

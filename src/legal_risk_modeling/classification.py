@@ -12,6 +12,11 @@ from sklearn.metrics import accuracy_score, f1_score, precision_score, recall_sc
 from .features import FEATURE_NAMES, build_feature_frame
 from .manifest import build_manifest, write_manifest
 from .models import build_classification_model, classification_model_spec
+from .promotion import (
+    build_classification_promotion_report,
+    classification_promotion_policy,
+)
+from .temporal import TemporalSplitPolicy
 
 _TEXT_FIELDS = [
     "JTITLE",
@@ -96,6 +101,7 @@ def prepare_classification_frame(
             if label is None and use_derived_label_from_amounts:
                 label = derived
                 label_source = "derived_from_manual_amounts"
+
         labels.append(label)
         label_sources.append(label_source)
         derived_labels.append(derived)
@@ -119,27 +125,6 @@ def prepare_classification_frame(
         if column in raw.columns:
             features[column] = raw[column]
     return features
-
-
-def _split_frame(
-    frame: pd.DataFrame,
-    *,
-    train_start_year: int,
-    train_end_year: int,
-    validation_year: int,
-    test_year: int,
-    latest_check_year: int,
-) -> list[tuple[str, pd.DataFrame]]:
-    years = pd.to_numeric(frame["decision_year"], errors="coerce")
-    return [
-        (
-            f"train_{train_start_year}_{train_end_year}",
-            frame[(years >= train_start_year) & (years <= train_end_year)].copy(),
-        ),
-        (f"validation_{validation_year}", frame[years == validation_year].copy()),
-        (f"test_{test_year}", frame[years == test_year].copy()),
-        (f"latest_{latest_check_year}", frame[years == latest_check_year].copy()),
-    ]
 
 
 def _metrics(model: str, split: str, actual: np.ndarray, probability: np.ndarray) -> dict[str, Any]:
@@ -199,10 +184,7 @@ def _prediction_rows(
 
 
 def _relative(path: Path, root: Path) -> str:
-    try:
-        return str(path.relative_to(root))
-    except ValueError:
-        return str(path)
+    return path.relative_to(root).as_posix()
 
 
 def run_classification(
@@ -220,6 +202,7 @@ def run_classification(
     latest_check_year: int = 2026,
     use_derived_label_from_amounts: bool = False,
     run_id: str = "classification-governed",
+    strict_git: bool = False,
 ) -> dict[str, Any]:
     project_root = project_root.resolve()
     input_csv = input_csv.resolve()
@@ -227,11 +210,21 @@ def run_classification(
     output_dir.mkdir(parents=True, exist_ok=True)
     if l2 <= 0:
         raise ValueError("l2 must be positive")
+
+    policy = TemporalSplitPolicy(
+        train_start_year=train_start_year,
+        train_end_year=train_end_year,
+        validation_year=validation_year,
+        test_year=test_year,
+        latest_check_year=latest_check_year,
+    )
     for stale_name in [
         "metrics.csv",
         "predictions.csv",
         "model_coefficients.csv",
         "model_status.json",
+        "promotion_report.json",
+        "approved_release.json",
         "manifest.json",
     ]:
         (output_dir / stale_name).unlink(missing_ok=True)
@@ -250,12 +243,6 @@ def run_classification(
     frame.to_csv(feature_path, index=False, encoding="utf-8-sig")
     labeled.to_csv(labeled_path, index=False, encoding="utf-8-sig")
 
-    split_policy = {
-        "train": f"{train_start_year}-{train_end_year}",
-        "validation": str(validation_year),
-        "test": str(test_year),
-        "latest_check": str(latest_check_year),
-    }
     counts = labeled["is_reduced_label"].value_counts().to_dict()
     class_counts = {"0": int(counts.get(0, 0)), "1": int(counts.get(1, 0))}
     base_status: dict[str, Any] = {
@@ -265,7 +252,7 @@ def run_classification(
         "labeled_rows": int(len(labeled)),
         "class_counts": class_counts,
         "model_features": FEATURE_NAMES,
-        "split_policy": split_policy,
+        "split_policy": policy.as_dict(),
         "outputs": {
             "feature_matrix": _relative(feature_path, project_root),
             "labeled_feature_matrix": _relative(labeled_path, project_root),
@@ -273,7 +260,19 @@ def run_classification(
         "note": "Only official/manual labels are used by default; AI suggestions remain features.",
     }
 
-    def finish(status: dict[str, Any], artifacts: list[Path]) -> dict[str, Any]:
+    invocation = {
+        "min_labeled_rows": min_labeled_rows,
+        "l2": l2,
+        "random_state": random_state,
+        "use_derived_label_from_amounts": use_derived_label_from_amounts,
+    }
+
+    def finish(
+        status: dict[str, Any],
+        artifacts: list[Path],
+        *,
+        promotion_policy: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         status_path.write_text(json.dumps(status, ensure_ascii=False, indent=2), encoding="utf-8")
         manifest = build_manifest(
             project_root=project_root,
@@ -281,6 +280,10 @@ def run_classification(
             artifact_paths=[*artifacts, status_path],
             model_spec=classification_model_spec(l2),
             run_id=run_id,
+            invocation=invocation,
+            temporal_split_policy=policy.as_dict(),
+            promotion_policy=promotion_policy,
+            strict_git=strict_git,
         )
         write_manifest(output_dir / "manifest.json", manifest)
         return status
@@ -296,15 +299,9 @@ def run_classification(
             [feature_path, labeled_path],
         )
 
-    splits = _split_frame(
-        labeled,
-        train_start_year=train_start_year,
-        train_end_year=train_end_year,
-        validation_year=validation_year,
-        test_year=test_year,
-        latest_check_year=latest_check_year,
-    )
-    train = splits[0][1]
+    splits = policy.split_frame(labeled)
+    split_map = dict(splits)
+    train = split_map[policy.train_name]
     train_counts = train["is_reduced_label"].value_counts().to_dict()
     if len(train) < 10 or 0 not in train_counts or 1 not in train_counts:
         return finish(
@@ -340,6 +337,8 @@ def run_classification(
     metrics_path = output_dir / "metrics.csv"
     predictions_path = output_dir / "predictions.csv"
     coefficients_path = output_dir / "model_coefficients.csv"
+    promotion_path = output_dir / "promotion_report.json"
+    release_path = output_dir / "approved_release.json"
     pd.DataFrame(metrics_rows).to_csv(metrics_path, index=False, encoding="utf-8-sig")
     pd.DataFrame(prediction_rows).to_csv(predictions_path, index=False, encoding="utf-8-sig")
 
@@ -364,20 +363,53 @@ def run_classification(
     )
     pd.DataFrame(coefficient_rows).to_csv(coefficients_path, index=False, encoding="utf-8-sig")
 
+    promotion = build_classification_promotion_report(
+        metrics_rows,
+        validation_split=policy.validation_name,
+        test_split=policy.test_name,
+        latest_split=policy.latest_name,
+    )
+    promotion_path.write_text(json.dumps(promotion, ensure_ascii=False, indent=2), encoding="utf-8")
+    release = {
+        "schema_version": 1,
+        "status": "approved",
+        "default_model": promotion["default_model"],
+        "approved_models": promotion["approved_models"],
+        "baseline": promotion["baseline"],
+        "predictions_artifact": _relative(predictions_path, project_root),
+        "metrics_artifact": _relative(metrics_path, project_root),
+        "promotion_report": _relative(promotion_path, project_root),
+    }
+    release_path.write_text(json.dumps(release, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    learned_approved = "logistic_regression_l2" in promotion["approved_models"]
     status = {
         **base_status,
         "status": "trained",
         "model": "logistic_regression_l2",
         "baselines": ["majority_baseline", "keyword_rule_baseline"],
         "l2": l2,
+        "promotion_status": "approved" if learned_approved else "rejected",
+        "release_default_model": promotion["default_model"],
         "outputs": {
             **base_status["outputs"],
             "metrics": _relative(metrics_path, project_root),
             "predictions": _relative(predictions_path, project_root),
             "model_coefficients": _relative(coefficients_path, project_root),
+            "promotion_report": _relative(promotion_path, project_root),
+            "approved_release": _relative(release_path, project_root),
         },
     }
     return finish(
         status,
-        [feature_path, labeled_path, metrics_path, predictions_path, coefficients_path],
+        [
+            feature_path,
+            labeled_path,
+            metrics_path,
+            predictions_path,
+            coefficients_path,
+            promotion_path,
+            release_path,
+        ],
+        promotion_policy=classification_promotion_policy(),
     )

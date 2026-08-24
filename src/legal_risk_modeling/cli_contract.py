@@ -3,6 +3,8 @@ from __future__ import annotations
 import argparse
 from pathlib import Path
 
+from .temporal import TemporalSplitPolicy
+
 
 def existing_csv_path(value: str | Path) -> Path:
     path = Path(value)
@@ -41,14 +43,10 @@ def validate_temporal_split(
     test_year: int,
     latest_check_year: int,
 ) -> None:
-    if not (
-        train_start_year
-        <= train_end_year
-        < validation_year
-        < test_year
-        < latest_check_year
-    ):
-        raise ValueError(
-            "invalid temporal split: require "
-            "train_start_year <= train_end_year < validation_year < test_year < latest_check_year"
-        )
+    TemporalSplitPolicy(
+        train_start_year=train_start_year,
+        train_end_year=train_end_year,
+        validation_year=validation_year,
+        test_year=test_year,
+        latest_check_year=latest_check_year,
+    )

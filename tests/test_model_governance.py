@@ -3,13 +3,20 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pandas as pd
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = PROJECT_ROOT / "src"
 if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from legal_risk_modeling.models import build_ratio_candidates
-from legal_risk_modeling.promotion import build_promotion_report, evaluate_model
+from legal_risk_modeling.promotion import (
+    build_classification_promotion_report,
+    build_promotion_report,
+    evaluate_model,
+)
+from legal_risk_modeling.temporal import TemporalSplitPolicy
 
 
 def metric(model: str, split: str, mae: float, rmse: float) -> dict[str, object]:
@@ -21,6 +28,19 @@ def metric(model: str, split: str, mae: float, rmse: float) -> dict[str, object]
         "rmse": rmse,
         "r2": 0.0,
         "bucket_accuracy": 0.2,
+    }
+
+
+def classifier_metric(model: str, split: str, f1: float, n: int = 100) -> dict[str, object]:
+    return {
+        "model": model,
+        "split": split,
+        "n": n,
+        "accuracy": f1,
+        "precision": f1,
+        "recall": f1,
+        "f1": f1,
+        "roc_auc": 0.6,
     }
 
 
@@ -66,6 +86,31 @@ def test_no_passing_model_falls_back_to_mean_baseline() -> None:
     report = build_promotion_report(rows, ["candidate"])
     assert report["approved_models"] == []
     assert report["default_model"] == "mean_baseline"
+
+
+def test_classification_promotion_rejects_test_regression() -> None:
+    rows = [
+        classifier_metric("majority_baseline", "validation_2024", 0.67),
+        classifier_metric("majority_baseline", "test_2025", 0.77),
+        classifier_metric("majority_baseline", "latest_2026", 0.75, n=5),
+        classifier_metric("logistic_regression_l2", "validation_2024", 0.67),
+        classifier_metric("logistic_regression_l2", "test_2025", 0.71),
+        classifier_metric("logistic_regression_l2", "latest_2026", 0.75, n=5),
+    ]
+    report = build_classification_promotion_report(rows)
+    assert report["approved_models"] == []
+    assert report["default_model"] == "majority_baseline"
+    assert any("test F1 regressed" in reason for reason in report["decisions"][0]["reasons"])
+    assert report["decisions"][0]["notices"]
+
+
+def test_temporal_policy_rolling_cv_never_consumes_promotion_year() -> None:
+    policy = TemporalSplitPolicy()
+    frame = pd.DataFrame({"decision_year": [2021, 2021, 2022, 2022, 2023, 2023, 2024]})
+    folds = policy.rolling_cv_splits(frame)
+    assert [name for name, _, _ in folds] == ["rolling_2022", "rolling_2023"]
+    assert all(int(validation["decision_year"].max()) <= 2023 for _, _, validation in folds)
+    assert all(2024 not in validation["decision_year"].tolist() for _, _, validation in folds)
 
 
 def test_shared_model_source_contains_expected_ridge_search_space() -> None:

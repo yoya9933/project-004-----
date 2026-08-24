@@ -3,6 +3,10 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
+import pytest
+
+from legal_risk_modeling.paths import resolve_ratio_release_dir
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -46,3 +50,15 @@ def test_legacy_powershell_model_scripts_are_only_wrappers() -> None:
         assert "$FeatureNames" not in text
         assert "Train-LogisticRegression" not in text
         assert len(text.splitlines()) < 60
+
+
+def test_duplicate_powershell_keyword_preprocessor_is_removed() -> None:
+    assert not (PROJECT_ROOT / "04_執行稿" / "build_keyword_candidate_pools.ps1").exists()
+
+
+def test_ratio_release_resolution_never_falls_back_to_legacy(tmp_path: Path) -> None:
+    legacy = tmp_path / "06_交付物" / "reduction_ratio_model_expanded_824_sklearn"
+    legacy.mkdir(parents=True)
+    (legacy / "approved_release.json").write_text("{}", encoding="utf-8")
+    with pytest.raises(FileNotFoundError, match="legacy artifacts are not permitted"):
+        resolve_ratio_release_dir(tmp_path)

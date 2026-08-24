@@ -143,7 +143,7 @@ def model_spec() -> dict[str, Any]:
     return {
         "target": "remaining_ratio",
         "prediction_clip": [0.0, 1.0],
-        "selection_metric": "validation_rmse",
+        "selection_metric": "training_period_rolling_cv_rmse",
         "families": {
             name: [candidate_name for candidate_name, _ in candidates]
             for name, candidates in build_ratio_candidates().items()
