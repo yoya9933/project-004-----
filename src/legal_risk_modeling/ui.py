@@ -8,9 +8,16 @@ import pandas as pd
 import streamlit as st
 
 from .manifest import validate_manifest
-from .paths import resolve_ratio_release_dir
+from .paths import (
+    artifact_root,
+    classification_output_dir,
+    data_quality_output_dir,
+    rag_benchmark_output_dir,
+    resolve_ratio_release_dir,
+)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
+HUMAN_GOLD_GATE_MIN_QUERIES = 20
 
 MODEL_LABELS = {
     "mean_baseline": "Mean baseline",
@@ -21,6 +28,9 @@ MODEL_LABELS = {
     "extra_trees": "Extra Trees",
     "gradient_boosting": "Gradient Boosting",
     "hist_gradient_boosting": "HistGradientBoosting",
+    "majority_baseline": "Majority baseline",
+    "keyword_rule_baseline": "Keyword-rule baseline",
+    "logistic_regression_l2": "Logistic regression",
 }
 
 
@@ -36,6 +46,33 @@ def load_json(path: str) -> dict[str, Any]:
 @st.cache_data(show_spinner=False)
 def load_csv(path: str) -> pd.DataFrame:
     return pd.read_csv(path, encoding="utf-8-sig")
+
+
+def _load_optional_json(path: Path) -> dict[str, Any] | None:
+    if not path.is_file():
+        return None
+    try:
+        return load_json(str(path))
+    except (OSError, json.JSONDecodeError):
+        return None
+
+
+def _quality_status(reports: list[dict[str, Any] | None]) -> str:
+    present = [report for report in reports if report is not None]
+    if any(str(report.get("status", "")).lower() == "fail" for report in present):
+        return "FAIL"
+    if len(present) != len(reports):
+        return "NOT AVAILABLE"
+    if all(str(report.get("status", "")).lower() == "pass" for report in present):
+        return "PASS"
+    return "UNKNOWN"
+
+
+def _format_metric(value: object, *, digits: int = 3) -> str:
+    try:
+        return f"{float(value):.{digits}f}"
+    except (TypeError, ValueError):
+        return "—"
 
 
 def load_release_bundle() -> dict[str, Any]:
@@ -99,12 +136,192 @@ def load_release_bundle() -> dict[str, Any]:
     }
 
 
+def load_dashboard_snapshot(bundle: dict[str, Any]) -> dict[str, Any]:
+    classification_dir = classification_output_dir(PROJECT_ROOT)
+    rag_dir = rag_benchmark_output_dir(PROJECT_ROOT)
+    quality_dir = data_quality_output_dir(PROJECT_ROOT)
+
+    classification_status = _load_optional_json(classification_dir / "model_status.json")
+    classification_release = _load_optional_json(classification_dir / "approved_release.json")
+    rag_proxy = _load_optional_json(rag_dir / "metrics.json")
+    rag_human = _load_optional_json(rag_dir / "human_metrics.json")
+
+    quality_reports = [
+        _load_optional_json(quality_dir / "annotation_workbook.json"),
+        _load_optional_json(quality_dir / "classification.json"),
+        _load_optional_json(quality_dir / "ratio.json"),
+    ]
+
+    manifest_git_sha = str((bundle["manifest"].get("git") or {}).get("sha") or "")
+    ci_snapshot_verified = False
+    history_dir = artifact_root(PROJECT_ROOT) / "benchmark_history"
+    if manifest_git_sha and history_dir.is_dir():
+        for snapshot_path in history_dir.glob("*.json"):
+            snapshot = _load_optional_json(snapshot_path)
+            if snapshot and str(snapshot.get("git_sha") or "") == manifest_git_sha:
+                ci_snapshot_verified = True
+                break
+
+    ratio_approved = [str(model) for model in bundle["release"].get("approved_models", [])]
+    ratio_decisions = bundle["promotion"].get("decisions", [])
+    ratio_passed = sum(bool(decision.get("passed")) for decision in ratio_decisions)
+
+    classification_default = None
+    classification_candidate = None
+    classification_promotion = None
+    if classification_release:
+        classification_default = classification_release.get("default_model")
+    if classification_status:
+        classification_candidate = classification_status.get("model")
+        classification_promotion = classification_status.get("promotion_status")
+
+    proxy_k = int((rag_proxy or {}).get("k") or 3)
+    human_k = int((rag_human or {}).get("k") or proxy_k)
+    eligible_queries = int((rag_human or {}).get("eligible_query_count") or 0)
+    approved_judgments = int((rag_human or {}).get("approved_judgment_count") or 0)
+    human_gate_active = eligible_queries >= HUMAN_GOLD_GATE_MIN_QUERIES
+
+    return {
+        "system": {
+            "manifest": "PASS",
+            "data_quality": _quality_status(quality_reports),
+            "ci_evidence": "VERIFIED" if ci_snapshot_verified else "NOT BUNDLED",
+        },
+        "ratio": {
+            "default_model": bundle["default_model"],
+            "approved_models": ratio_approved,
+            "passed_decisions": ratio_passed,
+            "decision_count": len(ratio_decisions),
+        },
+        "classification": {
+            "available": bool(classification_status and classification_release),
+            "default_model": classification_default,
+            "candidate": classification_candidate,
+            "promotion_status": classification_promotion,
+        },
+        "rag": {
+            "available": bool(rag_proxy and rag_human),
+            "proxy_k": proxy_k,
+            "proxy_mrr": (rag_proxy or {}).get(f"mrr_at_{proxy_k}"),
+            "proxy_hit_rate": (rag_proxy or {}).get(f"hit_rate_at_{proxy_k}"),
+            "human_k": human_k,
+            "human_ndcg": (rag_human or {}).get(f"ndcg_at_{human_k}"),
+            "eligible_queries": eligible_queries,
+            "approved_judgments": approved_judgments,
+            "gate_min_queries": HUMAN_GOLD_GATE_MIN_QUERIES,
+            "gate_active": human_gate_active,
+        },
+    }
+
+
+def render_demo_dashboard(bundle: dict[str, Any], snapshot: dict[str, Any]) -> None:
+    st.subheader("Governance dashboard")
+    st.caption("一頁確認 release integrity、model promotion 與 RAG evaluation readiness。")
+
+    top_left, top_right = st.columns(2)
+    with top_left:
+        with st.container(border=True):
+            st.markdown("#### System status")
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Manifest", snapshot["system"]["manifest"])
+            col2.metric("Data Quality", snapshot["system"]["data_quality"])
+            col3.metric("CI evidence", snapshot["system"]["ci_evidence"])
+            st.caption(
+                "CI evidence 代表 artifact 內含與 Manifest Git SHA 對得上的 benchmark snapshot；"
+                "不是現場連線查詢 GitHub 狀態。"
+            )
+
+    with top_right:
+        with st.container(border=True):
+            st.markdown("#### Ratio")
+            ratio = snapshot["ratio"]
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Default", model_label(str(ratio["default_model"])))
+            col2.metric("Approved learned", len(ratio["approved_models"]))
+            col3.metric(
+                "Promotion",
+                f"{ratio['passed_decisions']}/{ratio['decision_count']} passed",
+            )
+            if ratio["approved_models"]:
+                st.success(
+                    "Approved: "
+                    + ", ".join(model_label(model) for model in ratio["approved_models"])
+                )
+            else:
+                st.warning("Learned models rejected；正式 release 維持 Mean baseline。")
+
+    bottom_left, bottom_right = st.columns(2)
+    with bottom_left:
+        with st.container(border=True):
+            st.markdown("#### Classification")
+            classification = snapshot["classification"]
+            if not classification["available"]:
+                st.info("Classification governed artifacts 尚未 bundled。")
+            else:
+                col1, col2, col3 = st.columns(3)
+                col1.metric(
+                    "Default",
+                    model_label(str(classification["default_model"])),
+                )
+                col2.metric(
+                    "Candidate",
+                    model_label(str(classification["candidate"])),
+                )
+                col3.metric(
+                    "Promotion",
+                    str(classification["promotion_status"] or "unknown").upper(),
+                )
+                if str(classification["promotion_status"]).lower() == "approved":
+                    st.success("Candidate 已通過 classification promotion gate。")
+                else:
+                    st.warning("Candidate 未通過 promotion；正式 release 使用 baseline。")
+
+    with bottom_right:
+        with st.container(border=True):
+            st.markdown("#### RAG")
+            rag = snapshot["rag"]
+            if not rag["available"]:
+                st.info("RAG benchmark artifacts 尚未 bundled。")
+            else:
+                col1, col2 = st.columns(2)
+                col1.metric(
+                    f"Proxy MRR@{rag['proxy_k']}",
+                    _format_metric(rag["proxy_mrr"]),
+                )
+                col2.metric(
+                    f"Proxy HitRate@{rag['proxy_k']}",
+                    _format_metric(rag["proxy_hit_rate"]),
+                )
+                col3, col4 = st.columns(2)
+                human_ndcg = (
+                    _format_metric(rag["human_ndcg"])
+                    if rag["eligible_queries"] > 0
+                    else "—"
+                )
+                col3.metric(f"Human nDCG@{rag['human_k']}", human_ndcg)
+                col4.metric("Human gate", "ACTIVE" if rag["gate_active"] else "INACTIVE")
+
+                progress = min(
+                    rag["eligible_queries"] / max(rag["gate_min_queries"], 1),
+                    1.0,
+                )
+                st.progress(progress)
+                st.caption(
+                    f"Human Gold progress: {rag['eligible_queries']}/{rag['gate_min_queries']} "
+                    f"eligible queries；approved judgments: {rag['approved_judgments']}。"
+                )
+
+    st.caption(
+        f"Governed release Git SHA: `{(bundle['manifest'].get('git') or {}).get('sha') or 'unavailable'}`"
+    )
+
+
 def render_governance_status(bundle: dict[str, Any]) -> None:
     release = bundle["release"]
     promotion = bundle["promotion"]
     manifest = bundle["manifest"]
 
-    st.subheader("Model governance")
+    st.subheader("Ratio governance detail")
     col1, col2, col3 = st.columns(3)
     col1.metric("UI default", model_label(bundle["default_model"]))
     col2.metric("Approved learned models", len(release.get("approved_models", [])))
@@ -237,6 +454,10 @@ def main() -> None:
         index=allowed_models.index(default_model),
         format_func=model_label,
     )
+
+    dashboard_snapshot = load_dashboard_snapshot(bundle)
+    render_demo_dashboard(bundle, dashboard_snapshot)
+    st.divider()
 
     render_governance_status(bundle)
     tab_predictions, tab_metrics, tab_gate = st.tabs(["Predictions", "Backtest", "Promotion gate"])
