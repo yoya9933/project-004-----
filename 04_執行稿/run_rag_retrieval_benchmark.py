@@ -38,6 +38,8 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--min-hit-rate", type=float, default=0.0)
     parser.add_argument("--min-mrr", type=float, default=0.0)
     parser.add_argument("--min-human-queries", type=positive_int, default=20)
+    parser.add_argument("--min-human-judgments-per-query", type=positive_int, default=5)
+    parser.add_argument("--min-human-relevant-per-query", type=positive_int, default=1)
     parser.add_argument("--min-human-ndcg", type=float, default=0.0)
     return parser.parse_args()
 
@@ -56,7 +58,14 @@ def main() -> None:
             raise SystemExit(f"{name} must be between 0 and 1")
 
     proxy = write_benchmark(retrieval_csv, metadata_csv, args.output_dir, k=args.k)
-    human = write_human_benchmark(retrieval_csv, human_gold_csv, args.output_dir, k=args.k)
+    human = write_human_benchmark(
+        retrieval_csv,
+        human_gold_csv,
+        args.output_dir,
+        k=args.k,
+        min_judgments_per_query=args.min_human_judgments_per_query,
+        min_relevant_per_query=args.min_human_relevant_per_query,
+    )
     hit_key = f"hit_rate_at_{args.k}"
     mrr_key = f"mrr_at_{args.k}"
     ndcg_key = f"ndcg_at_{args.k}"
@@ -79,6 +88,7 @@ def main() -> None:
         "human": human,
         "human_gate_active": human_gate_active,
         "human_gate_min_queries": args.min_human_queries,
+        "human_gate_eligibility_policy": human["eligibility_policy"],
     }
     print(json.dumps(result, ensure_ascii=False))
     if failures:
